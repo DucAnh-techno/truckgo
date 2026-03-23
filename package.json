@@ -1,0 +1,71 @@
+{
+  "name": "tmdt-web-temp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "admin:bootstrap": "node scripts/bootstrap-admin.mjs"
+  },
+  "dependencies": {
+    "firebase": "^12.11.0",
+    "next": "16.2.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "app": {
+    "routes": {
+      "auth": {
+        "login": "app/(auth)/login/page.tsx",
+        "register": "app/(auth)/register/page.tsx"
+      },
+      "trucks": {
+        "": "app/trucks/page.tsx",
+        "[id]": "app/trucks/[id]/page.tsx",
+        "create": "app/trucks/create/page.tsx"
+      },
+      "bookings": {
+        "": "app/bookings/page.tsx"
+      },
+      "": "app/page.tsx"
+    },
+    "layout": "app/layout.tsx",
+    "globalStyles": "app/globals.css"
+  },
+  "components": {
+    "ui": "components/ui",
+    "TruckCard": "components/TruckCard.tsx",
+    "TruckForm": "components/TruckForm.tsx",
+    "BookingForm": "components/BookingForm.tsx",
+    "AuthForm": "components/AuthForm.tsx"
+  },
+  "lib": {
+    "firebase": {
+      "config": "lib/firebase/config.ts",
+      "rules": "lib/firebase/rules.ts"
+    },
+    "services": {
+      "auth": "lib/services/auth.ts",
+      "trucks": "lib/services/trucks.ts",
+      "bookings": "lib/services/bookings.ts"
+    },
+    "utils": {
+      "format": "lib/utils/format.ts"
+    }
+  },
+  "types": "types/index.ts",
+  "middleware": "middleware.ts"
+}
