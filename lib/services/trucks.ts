@@ -305,11 +305,14 @@ async function uploadTruckImages(ownerId: string, images: File[]) {
 
 export async function getMarketplaceTrucks(filters: TruckFilters = {}) {
   if (!canUseFirebaseRead()) {
+    console.warn("[trucks] Firebase chưa cấu hình, dùng demoTrucks");
     return enrichOwnerTrust(filterTrucks(demoTrucks, filters));
   }
 
   try {
-    const constraints: QueryConstraint[] = [];
+    const constraints: QueryConstraint[] = [
+      where("isAvailable", "==", true),
+    ];
 
     if (filters.maxPrice) {
       constraints.push(where("pricePerDay", "<=", filters.maxPrice));
@@ -317,6 +320,9 @@ export async function getMarketplaceTrucks(filters: TruckFilters = {}) {
 
     const trucksQuery = query(collection(db!, COLLECTIONS.trucks), ...constraints);
     const snapshot = await getDocs(trucksQuery);
+
+    console.debug("[trucks] firestore result", snapshot.size, "items");
+
     const trucks = snapshot.docs.map((item) =>
       toTruckCatalogItem({
         id: item.id,
@@ -325,7 +331,8 @@ export async function getMarketplaceTrucks(filters: TruckFilters = {}) {
     );
 
     return enrichOwnerTrust(filterTrucks(trucks, filters));
-  } catch {
+  } catch (error) {
+    console.error("[trucks] lỗi getMarketplaceTrucks", error);
     return enrichOwnerTrust(filterTrucks(demoTrucks, filters));
   }
 }
