@@ -54,7 +54,7 @@ export function getVerificationDocumentTypeLabel(
 ) {
   switch (type) {
     case "identity":
-      return "CCCD/CMND";
+      return "CCCD";
     case "driverLicense":
       return "Giấy phép lái xe";
     case "vehicleRegistration":

@@ -141,12 +141,24 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
       </section>
 
       {selectedTruckId ? (
-        <BookingForm
-          truckId={selectedTruckId}
-          onSubmitted={() =>
-            profile ? loadBookingsForCurrentUser(profile.id) : undefined
-          }
-        />
+        <div className="space-y-4">
+          {profile?.role === "admin" ? (
+            <div className="flex justify-end">
+              <Link
+                href={`/trucks/${selectedTruckId}/edit`}
+                className="rounded-full border border-stone-200 px-4 py-2 text-sm font-semibold text-stone-700 transition hover:border-stone-900 hover:text-stone-950"
+              >
+                Chỉnh sửa xe này
+              </Link>
+            </div>
+          ) : null}
+          <BookingForm
+            truckId={selectedTruckId}
+            onSubmitted={() =>
+              profile ? loadBookingsForCurrentUser(profile.id) : undefined
+            }
+          />
+        </div>
       ) : (
         <div className="rounded-[28px] border border-dashed border-stone-300 bg-white/80 p-6 text-sm text-stone-600">
           Chọn một xe từ{" "}

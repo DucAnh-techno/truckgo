@@ -1,13 +1,18 @@
 import Link from "next/link";
 
 import { BookingForm } from "@/components/BookingForm";
+import { DeleteTruckButton } from "@/components/DeleteTruckButton";
+import { EditTruckButton } from "../../../components/EditTruckButton";
 import { ReportButton } from "@/components/ReportButton";
 import { ReviewList } from "@/components/ReviewList";
 import { TrustSummary } from "@/components/TrustSummary";
+import { TruckImageGallery } from "@/components/TruckImageGallery";
+import { TruckOwnerRedirectGate } from "@/components/TruckOwnerRedirectGate";
 import {
   getTruckById,
   type TruckCatalogItem,
 } from "@/lib/services/trucks";
+import { getBookingCountByTruckId } from "@/lib/services/bookings";
 import { getReviewsForTargetUser } from "@/lib/services/reviews";
 import {
   getPublicUserProfileById,
@@ -29,13 +34,16 @@ export default async function TruckDetailPage({ params }: TruckDetailPageProps) 
   let reviews: Review[] = [];
   let errorMessage = "";
 
+  let rentalCount = 0;
+
   try {
     truck = await getTruckById(id);
 
     if (truck) {
-      [owner, reviews] = await Promise.all([
+      [owner, reviews, rentalCount] = await Promise.all([
         getPublicUserProfileById(truck.ownerId),
         getReviewsForTargetUser(truck.ownerId),
+        getBookingCountByTruckId(truck.id),
       ]);
     }
   } catch (error) {
@@ -76,96 +84,70 @@ export default async function TruckDetailPage({ params }: TruckDetailPageProps) 
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
+      <TruckOwnerRedirectGate truckId={truck.id} ownerId={truck.ownerId} />
       <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="space-y-6">
-          <div
-            className="relative overflow-hidden rounded-[40px] p-8 text-white shadow-[0_28px_80px_rgba(41,24,12,0.18)]"
-            style={{
-              backgroundImage: truck.images[0]?.startsWith("http")
-                ? `linear-gradient(135deg, rgba(31,22,18,0.28), rgba(31,22,18,0.6)), url(${truck.images[0]})`
-                : `linear-gradient(135deg, ${truck.accentFrom}, ${truck.accentTo})`,
-              backgroundPosition: "center",
-              backgroundSize: "cover",
-            }}
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.3),transparent_32%)]" />
-            <div className="relative">
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded-full bg-white/14 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]">
-                  {truck.category}
-                </span>
-                {truck.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full border border-white/30 px-3 py-1 text-xs"
-                  >
-                    {tag}
-                  </span>
-                ))}
+          <TruckImageGallery
+            images={truck.images}
+            primaryImageUrl={truck.primaryImageUrl}
+          />
+
+          <div className="rounded-4xl border border-white/70 bg-white/80 p-6 shadow-[0_20px_60px_rgba(41,24,12,0.08)]">
+            <h2 className="text-2xl font-semibold text-stone-950">
+              Thông tin chi tiết xe
+            </h2>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                <span>Hãng xe</span>
+                <span className="font-semibold text-stone-900">{truck.brand || "N/A"}</span>
               </div>
-
-              <h1 className="mt-6 text-4xl font-semibold leading-tight">
-                {truck.name}
-              </h1>
-              <p className="mt-4 max-w-2xl text-base leading-8 text-white/82">
-                {truck.description}
-              </p>
-
-              <div className="mt-8 grid gap-4 sm:grid-cols-3">
-                <div className="rounded-[28px] bg-white/10 p-5">
-                  <p className="text-sm text-white/65">Giá theo ngày</p>
-                  <p className="mt-2 text-3xl font-semibold">
-                    {formatCurrency(truck.pricePerDay)}
-                  </p>
-                </div>
-                <div className="rounded-[28px] bg-white/10 p-5">
-                  <p className="text-sm text-white/65">Tải trọng</p>
-                  <p className="mt-2 text-3xl font-semibold">
-                    {truck.capacity.toLocaleString("vi-VN")} kg
-                  </p>
-                </div>
-                <div className="rounded-[28px] bg-white/10 p-5">
-                  <p className="text-sm text-white/65">Khu vực</p>
-                  <p className="mt-2 text-2xl font-semibold">{truck.location}</p>
-                </div>
+              <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                <span>Năm sản xuất</span>
+                <span className="font-semibold text-stone-900">{truck.year ?? "N/A"}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                <span>Loại xe</span>
+                <span className="font-semibold text-stone-900">{truck.vehicleType || "N/A"}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                <span>Khu vực</span>
+                <span className="font-semibold text-stone-900">{truck.location}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                <span>Kích thước thùng</span>
+                <span className="font-semibold text-stone-900">
+                  {`${truck.dimensions?.length ?? "--"} x ${truck.dimensions?.width ?? "--"} x ${truck.dimensions?.height ?? "--"} m`}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                <span>Thể tích thùng</span>
+                <span className="font-semibold text-stone-900">{truck.cargoVolume ?? "--"} m³</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                <span>Nhiên liệu</span>
+                <span className="font-semibold text-stone-900">{truck.fuelType}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                <span>Tiêu hao</span>
+                <span className="font-semibold text-stone-900">{truck.fuelConsumption} L / 100km</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                <span>Tải trọng</span>
+                <span className="font-semibold text-stone-900">{truck.capacity.toLocaleString("vi-VN")} kg</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                <span>Giá thuê</span>
+                <span className="font-semibold text-stone-900">{formatCurrency(truck.pricePerDay)}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
+                <span>Số lượt thuê</span>
+                <span className="font-semibold text-stone-900">{rentalCount}</span>
               </div>
             </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            {truck.images.length > 0 ? (
-              truck.images.map((image, index) => (
-                <div
-                  key={`${image}-${index}`}
-                  className="overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_20px_60px_rgba(41,24,12,0.08)]"
-                >
-                  <div
-                    className="min-h-48"
-                    style={{
-                      backgroundImage: image.startsWith("http")
-                        ? `url(${image})`
-                        : `linear-gradient(${135 + index * 20}deg, ${
-                            truck.accentFrom
-                          }, ${truck.accentTo})`,
-                      backgroundPosition: "center",
-                      backgroundSize: "cover",
-                    }}
-                  />
-                  <div className="p-4">
-                    <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-500">
-                      Ảnh {index + 1}
-                    </p>
-                    <p className="mt-2 text-lg font-semibold text-stone-950">
-                      Gallery xe
-                    </p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-[28px] border border-dashed border-stone-300 bg-white/80 p-10 text-center text-stone-600 sm:col-span-3">
-                Xe này chưa có hình ảnh.
-              </div>
-            )}
+            <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-4">
+              <p className="text-sm font-semibold text-stone-700">Mô tả</p>
+              <p className="mt-2 text-sm text-stone-600">{truck.description}</p>
+            </div>
           </div>
         </div>
 
@@ -229,6 +211,9 @@ export default async function TruckDetailPage({ params }: TruckDetailPageProps) 
               <div className="pt-2">
                 <ReportButton targetId={truck.ownerId} targetType="user" />
               </div>
+
+              <EditTruckButton truckId={truck.id} ownerId={truck.ownerId} />
+              <DeleteTruckButton truckId={truck.id} ownerId={truck.ownerId} />
             </div>
             <Link
               href="/trucks"

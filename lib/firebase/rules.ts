@@ -215,6 +215,13 @@ service firebase.storage {
       ));
       allow write: if isSignedIn() && request.auth.uid == userId;
     }
+
+    match /truck-docs/{userId}/{allPaths=**} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || (
+        get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == "admin"
+      ));
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
   }
 }
 `.trim();

@@ -1,17 +1,18 @@
 import { v4 as uuidv4 } from "uuid";
 import {
-  addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
   query,
+  setDoc,
   where,
   type QueryConstraint,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
-import { COLLECTIONS, type Truck } from "@/types";
+import { COLLECTIONS, type Truck, type VehicleDocument } from "@/types";
 import {
   db,
   ensureFirebaseConfigured,
@@ -48,147 +49,50 @@ export interface TruckFilters {
 export interface CreateTruckInput {
   ownerId: string;
   name: string;
+  brand: string;
+  year: number;
+  vehicleType: string;
   pricePerDay: number;
   location: string;
   capacity: number;
+  dimensions: {
+    length: number;
+    width: number;
+    height: number;
+  };
+  fuelType: string;
+  fuelConsumption: number;
   description: string;
   images: File[];
+  primaryImageIndex: number;
+  vehicleRegistrationFile?: File | null;
+  safetyInspectionFile?: File | null;
 }
 
-const demoTrucks: TruckCatalogItem[] = [
-  {
-    id: "hino-500-long-bien",
-    ownerId: "owner_01",
-    name: "Hino 500 Mui Bạt Premium",
-    pricePerDay: 1800000,
-    location: "Long Biên, Hà Nội",
-    capacity: 8000,
-    images: ["hero", "cabin", "cargo"],
-    description:
-      "Dòng xe mui bạt giữ phong cách mạnh mẽ, hợp vận chuyển nội thành và liên tỉnh với khoang thùng rộng và đội xe được bảo dưỡng định kỳ.",
-    createdAt: "2026-03-18T08:30:00.000Z",
-    updatedAt: "2026-03-20T08:30:00.000Z",
-    isAvailable: true,
-    category: "Xe mui bạt",
-    summary: "Giao nhanh cho đơn hàng thương mại và logistics nội thành.",
-    gear: "Số sàn 6 cấp",
-    fuel: "Diesel tiết kiệm",
-    tags: ["Bảo hiểm đầy đủ", "Có tài xế", "Xuất hóa đơn"],
-    accentFrom: "#ff8133",
-    accentTo: "#ff4d00",
-    availableFrom: "Có thể nhận xe trong 2 giờ",
-  },
-  {
-    id: "isuzu-qkr-binh-tan",
-    ownerId: "owner_01",
-    name: "Isuzu QKR City Delivery",
-    pricePerDay: 1250000,
-    location: "Bình Tân, TP.HCM",
-    capacity: 2500,
-    images: ["hero", "cabin", "cargo"],
-    description:
-      "Phù hợp giao hàng siêu thị, điện máy và hàng tiêu dùng trong thành phố. Thân xe gọn, dễ vào hẻm và khu dân cư.",
-    createdAt: "2026-03-17T10:00:00.000Z",
-    updatedAt: "2026-03-20T08:30:00.000Z",
-    isAvailable: true,
-    category: "Xe tải nhỏ",
-    summary: "Nhỏ gọn, linh hoạt, tối ưu cho chuyến giao hàng ngày.",
-    gear: "Số tay",
-    fuel: "Diesel",
-    tags: ["Nhận xe sớm", "Phù hợp nội thành", "Kiểm định mới"],
-    accentFrom: "#ffd166",
-    accentTo: "#f77f00",
-    availableFrom: "Còn 3 lịch trong hôm nay",
-  },
-  {
-    id: "thaco-ollin-da-nang",
-    ownerId: "owner_02",
-    name: "Thaco Ollin Thùng Kín",
-    pricePerDay: 1550000,
-    location: "Hải Châu, Đà Nẵng",
-    capacity: 5000,
-    images: ["hero", "cabin", "cargo"],
-    description:
-      "Xe thùng kín chuyên chở hàng gia dụng và hàng cần tránh nắng mưa, phù hợp giao nhận cho doanh nghiệp vừa và nhỏ.",
-    createdAt: "2026-03-15T09:00:00.000Z",
-    updatedAt: "2026-03-19T14:10:00.000Z",
-    isAvailable: true,
-    category: "Xe thùng kín",
-    summary: "An toàn cho hàng hóa cần bảo quản, chạy đường dài ổn định.",
-    gear: "Số sàn 5 cấp",
-    fuel: "Diesel",
-    tags: ["Hỗ trợ đường dài", "Thùng kín sạch", "GPS theo dõi"],
-    accentFrom: "#6c9a8b",
-    accentTo: "#275d63",
-    availableFrom: "Đặt trước 1 ngày",
-  },
-  {
-    id: "hyundai-75s-ben-nghe",
-    ownerId: "owner_03",
-    name: "Hyundai 75S Lift Gate",
-    pricePerDay: 2100000,
-    location: "Bến Nghé, TP.HCM",
-    capacity: 3500,
-    images: ["hero", "cabin", "cargo"],
-    description:
-      "Trang bị bàn nâng sau xe, rất hợp với các đơn hàng cần bốc xếp nhanh tại kho, cửa hàng và trung tâm thương mại.",
-    createdAt: "2026-03-11T11:15:00.000Z",
-    updatedAt: "2026-03-20T07:00:00.000Z",
-    isAvailable: true,
-    category: "Xe nâng đuôi",
-    summary: "Tăng tốc độ bốc xếp và giảm chi phí nhân công cho kho vận.",
-    gear: "Số tự động",
-    fuel: "Diesel Euro 5",
-    tags: ["Bàn nâng sau", "Khoang thùng rộng", "Chăm sóc 24/7"],
-    accentFrom: "#5fbff9",
-    accentTo: "#1f6feb",
-    availableFrom: "Nhận xe ngay trong ca tối",
-  },
-  {
-    id: "jac-n650-hai-phong",
-    ownerId: "owner_02",
-    name: "JAC N650 Chở Hàng Nông Sản",
-    pricePerDay: 1450000,
-    location: "Hồng Bàng, Hải Phòng",
-    capacity: 6500,
-    images: ["hero", "cabin", "cargo"],
-    description:
-      "Thùng xe thoáng, động cơ bền bỉ, phù hợp chở nông sản, vật liệu và đơn hàng cần vận chuyển liên tỉnh.",
-    createdAt: "2026-03-13T13:30:00.000Z",
-    updatedAt: "2026-03-19T19:45:00.000Z",
-    isAvailable: true,
-    category: "Xe liên tỉnh",
-    summary: "Cân bằng giữa tải trọng, chi phí và độ bền cho chuyến đường xa.",
-    gear: "Số sàn",
-    fuel: "Diesel",
-    tags: ["Tuyến Bắc Ninh", "Tuyến Quảng Ninh", "Tải trọng lớn"],
-    accentFrom: "#8d99ae",
-    accentTo: "#2b2d42",
-    availableFrom: "Còn lịch trong cuối tuần",
-  },
-  {
-    id: "fuso-canter-go-vap",
-    ownerId: "owner_04",
-    name: "Fuso Canter Retail Box",
-    pricePerDay: 1380000,
-    location: "Gò Vấp, TP.HCM",
-    capacity: 3200,
-    images: ["hero", "cabin", "cargo"],
-    description:
-      "Xe cân đối cho các shop online và đơn vị phân phối cần luồng giao ổn định, khoang thùng sạch và đẹp để lên thương hiệu.",
-    createdAt: "2026-03-12T15:00:00.000Z",
-    updatedAt: "2026-03-20T06:10:00.000Z",
-    isAvailable: true,
-    category: "Xe phân phối",
-    summary: "Tối ưu cho vận hành thương mại điện tử và giao nhanh nhiều điểm.",
-    gear: "Số tay",
-    fuel: "Diesel",
-    tags: ["Shop online", "Giao nhiều điểm", "Nội thất đẹp"],
-    accentFrom: "#f4acb7",
-    accentTo: "#c9184a",
-    availableFrom: "Đã sẵn sàng bàn giao",
-  },
-];
+export interface UpdateTruckInput {
+  truckId: string;
+  requesterId: string;
+  name: string;
+  brand: string;
+  year: number;
+  vehicleType: string;
+  pricePerDay: number;
+  location: string;
+  capacity: number;
+  dimensions: {
+    length: number;
+    width: number;
+    height: number;
+  };
+  fuelType: string;
+  fuelConsumption: number;
+  description: string;
+  existingImageUrls: string[];
+  newImages: File[];
+  primaryImageIndex: number;
+  vehicleRegistrationFile?: File | null;
+  safetyInspectionFile?: File | null;
+}
 
 const palette = [
   ["#ff8133", "#ff4d00"],
@@ -220,6 +124,8 @@ function toTruckCatalogItem(truck: Truck): TruckCatalogItem {
 
   return {
     ...truck,
+    primaryImageUrl: truck.primaryImageUrl ?? truck.images[0],
+    documentsApproved: truck.documentsApproved ?? false,
     category:
       truck.capacity >= 5000
         ? "Xe tải hạng nặng"
@@ -228,11 +134,13 @@ function toTruckCatalogItem(truck: Truck): TruckCatalogItem {
           : "Xe giao vận nhỏ",
     summary,
     gear: "Sẵn sàng khai thác",
-    fuel: "Máy dầu",
+    fuel: truck.fuelType || "Máy dầu",
     tags: [
       truck.isAvailable ? "Có sẵn" : "Tạm hết lịch",
       truck.location,
       `${truck.capacity.toLocaleString("vi-VN")} kg`,
+      ...(truck.brand ? [truck.brand] : []),
+      ...(truck.year ? [`${truck.year}`] : []),
     ],
     accentFrom,
     accentTo,
@@ -242,8 +150,52 @@ function toTruckCatalogItem(truck: Truck): TruckCatalogItem {
   };
 }
 
+function resolvePrimaryImageUrl(images: string[], primaryImageIndex: number) {
+  if (images.length === 0) {
+    return undefined;
+  }
+
+  const safeIndex = Math.max(0, Math.min(primaryImageIndex, images.length - 1));
+  return images[safeIndex];
+}
+
+function hasDocumentType(documents: VehicleDocument[], type: VehicleDocument["type"]) {
+  return documents.some((document) => document.type === type);
+}
+
+async function uploadVehicleDocument(
+  ownerId: string,
+  truckId: string,
+  documentType: VehicleDocument["type"],
+  file: File,
+  approved: boolean
+) {
+  const firebase = ensureFirebaseConfigured();
+  const extension = file.name.split(".").pop();
+  const storageRef = ref(
+    firebase.storage,
+    `truck-docs/${ownerId}/${truckId}/${documentType}-${uuidv4()}${
+      extension ? `.${extension}` : ""
+    }`
+  );
+  const snapshot = await uploadBytes(storageRef, file);
+
+  return {
+    id: uuidv4(),
+    name: file.name,
+    type: documentType,
+    url: await getDownloadURL(snapshot.ref),
+    uploadedAt: new Date().toISOString(),
+    approved,
+    approvedAt: approved ? new Date().toISOString() : undefined,
+  } satisfies VehicleDocument;
+}
+
 async function enrichOwnerTrust(trucks: TruckCatalogItem[]) {
+  // Bước 1: Thu thập tất cả ownerIds duy nhất
   const ownerIds = Array.from(new Set(trucks.map((truck) => truck.ownerId)));
+
+  // Bước 2: Lấy dữ liệu public profiles và review summaries
   const [publicProfiles, reviewSummaries] = await Promise.all([
     getPublicUserProfilesByIds(ownerIds),
     getReviewSummariesForUsers(ownerIds),
@@ -306,7 +258,7 @@ async function uploadTruckImages(ownerId: string, images: File[]) {
 export async function getMarketplaceTrucks(filters: TruckFilters = {}) {
   if (!canUseFirebaseRead()) {
     console.warn("[trucks] Firebase chưa cấu hình, dùng demoTrucks");
-    return enrichOwnerTrust(filterTrucks(demoTrucks, filters));
+    throw new Error("Firebase chưa được cấu hình để đọc dữ liệu xe tải.");
   }
 
   try {
@@ -333,7 +285,7 @@ export async function getMarketplaceTrucks(filters: TruckFilters = {}) {
     return enrichOwnerTrust(filterTrucks(trucks, filters));
   } catch (error) {
     console.error("[trucks] lỗi getMarketplaceTrucks", error);
-    return enrichOwnerTrust(filterTrucks(demoTrucks, filters));
+    throw new Error("Lỗi khi truy vấn dữ liệu xe tải từ Firebase.");
   }
 }
 
@@ -344,13 +296,7 @@ export async function getFeaturedTrucks() {
 
 export async function getTruckById(id: string) {
   if (!canUseFirebaseRead()) {
-    const truck = demoTrucks.find((item) => item.id === id);
-    if (!truck) {
-      return null;
-    }
-
-    const [enrichedTruck] = await enrichOwnerTrust([truck]);
-    return enrichedTruck ?? null;
+    throw new Error("Firebase chưa được cấu hình để đọc dữ liệu xe tải.");
   }
 
   try {
@@ -369,19 +315,13 @@ export async function getTruckById(id: string) {
 
     return enrichedTruck ?? null;
   } catch {
-    const truck = demoTrucks.find((item) => item.id === id);
-    if (!truck) {
-      return null;
-    }
-
-    const [enrichedTruck] = await enrichOwnerTrust([truck]);
-    return enrichedTruck ?? null;
+    throw new Error("Lỗi khi truy vấn dữ liệu xe tải từ Firebase.");
   }
 }
 
 export async function getOwnerTrucks(ownerId: string) {
   if (!canUseFirebaseRead()) {
-    return enrichOwnerTrust(demoTrucks.filter((truck) => truck.ownerId === ownerId));
+    throw new Error("Firebase chưa được cấu hình để đọc dữ liệu xe tải.");
   }
 
   try {
@@ -402,13 +342,39 @@ export async function getOwnerTrucks(ownerId: string) {
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     );
   } catch {
-    return enrichOwnerTrust(demoTrucks.filter((truck) => truck.ownerId === ownerId));
+    throw new Error("Lỗi khi truy vấn dữ liệu xe tải từ Firebase.");
   }
 }
 
 export async function getPopularLocations() {
   const trucks = await getMarketplaceTrucks();
   return Array.from(new Set(trucks.map((truck) => truck.location)));
+}
+
+export async function deleteTruck(truckId: string, requesterId: string) {
+  const firebase = ensureFirebaseConfigured();
+
+  const truckDocRef = doc(firebase.db, COLLECTIONS.trucks, truckId);
+  const truckSnapshot = await getDoc(truckDocRef);
+
+  if (!truckSnapshot.exists()) {
+    throw new Error("Xe không tồn tại hoặc đã bị xóa.");
+  }
+
+  const truck = truckSnapshot.data() as Omit<Truck, "id">;
+  const requester = await getUserProfileById(requesterId);
+
+  if (!requester) {
+    throw new Error("Không tìm thấy thông tin người dùng.");
+  }
+
+  if (requester.role !== "admin" && requesterId !== truck.ownerId) {
+    throw new Error("Bạn không có quyền xóa xe này.");
+  }
+
+  await deleteDoc(truckDocRef);
+
+  return true;
 }
 
 export async function createTruck(input: CreateTruckInput) {
@@ -423,26 +389,182 @@ export async function createTruck(input: CreateTruckInput) {
     throw new Error("Chỉ tài khoản chủ xe hoặc quản trị viên mới có quyền đăng xe.");
   }
 
+  const isAdmin = owner.role === "admin";
+
+  if (!isAdmin && (!input.vehicleRegistrationFile || !input.safetyInspectionFile)) {
+    throw new Error("Chủ xe cần tải đủ đăng ký xe và kiểm định an toàn kỹ thuật.");
+  }
+
   const imageUrls = await uploadTruckImages(input.ownerId, input.images);
+  const primaryImageUrl = resolvePrimaryImageUrl(imageUrls, input.primaryImageIndex);
+  const truckDocRef = doc(collection(firebase.db, COLLECTIONS.trucks));
+
+  const vehicleDocuments: VehicleDocument[] = [];
+
+  if (input.vehicleRegistrationFile) {
+    vehicleDocuments.push(
+      await uploadVehicleDocument(
+        input.ownerId,
+        truckDocRef.id,
+        "vehicleRegistration",
+        input.vehicleRegistrationFile,
+        isAdmin
+      )
+    );
+  }
+
+  if (input.safetyInspectionFile) {
+    vehicleDocuments.push(
+      await uploadVehicleDocument(
+        input.ownerId,
+        truckDocRef.id,
+        "safetyInspection",
+        input.safetyInspectionFile,
+        isAdmin
+      )
+    );
+  }
+
+  const cargoVolume =
+    input.dimensions.length * input.dimensions.width * input.dimensions.height;
 
   const payload: Omit<Truck, "id"> = {
     ownerId: input.ownerId,
     name: input.name,
+    brand: input.brand,
+    year: input.year,
+    vehicleType: input.vehicleType,
     pricePerDay: input.pricePerDay,
     location: input.location,
     capacity: input.capacity,
+    dimensions: input.dimensions,
+    cargoVolume: Number(cargoVolume.toFixed(2)),
+    fuelType: input.fuelType,
+    fuelConsumption: input.fuelConsumption,
     images: imageUrls,
+    primaryImageUrl,
+    vehicleDocuments,
+    documentsApproved: isAdmin,
     description: input.description,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     isAvailable: true,
+    rentalCount: 0,
   };
 
-  const reference = await addDoc(collection(firebase.db, COLLECTIONS.trucks), payload);
+  await setDoc(truckDocRef, payload);
 
   const [truck] = await enrichOwnerTrust([
     toTruckCatalogItem({
-      id: reference.id,
+      id: truckDocRef.id,
+      ...payload,
+    }),
+  ]);
+
+  return truck;
+}
+
+export async function updateTruck(input: UpdateTruckInput) {
+  const firebase = ensureFirebaseConfigured();
+
+  const [requester, truckSnapshot] = await Promise.all([
+    getUserProfileById(input.requesterId),
+    getDoc(doc(firebase.db, COLLECTIONS.trucks, input.truckId)),
+  ]);
+
+  if (!requester || (requester.role !== "owner" && requester.role !== "admin")) {
+    throw new Error("Bạn không có quyền chỉnh sửa xe này.");
+  }
+
+  if (!truckSnapshot.exists()) {
+    throw new Error("Xe không tồn tại.");
+  }
+
+  const currentTruck = {
+    id: truckSnapshot.id,
+    ...(truckSnapshot.data() as Omit<Truck, "id">),
+  };
+
+  if (requester.role !== "admin" && currentTruck.ownerId !== requester.id) {
+    throw new Error("Bạn không có quyền chỉnh sửa xe này.");
+  }
+
+  const ownerId = currentTruck.ownerId;
+  const isAdmin = requester.role === "admin";
+  const uploadedNewImages = await uploadTruckImages(ownerId, input.newImages);
+  const mergedImages = [...input.existingImageUrls, ...uploadedNewImages];
+
+  const baseVehicleDocuments = currentTruck.vehicleDocuments ?? [];
+  const nextVehicleDocuments = [...baseVehicleDocuments];
+
+  if (input.vehicleRegistrationFile) {
+    const uploadedDoc = await uploadVehicleDocument(
+      ownerId,
+      currentTruck.id,
+      "vehicleRegistration",
+      input.vehicleRegistrationFile,
+      isAdmin
+    );
+    const filtered = nextVehicleDocuments.filter(
+      (document) => document.type !== "vehicleRegistration"
+    );
+    nextVehicleDocuments.length = 0;
+    nextVehicleDocuments.push(...filtered, uploadedDoc);
+  }
+
+  if (input.safetyInspectionFile) {
+    const uploadedDoc = await uploadVehicleDocument(
+      ownerId,
+      currentTruck.id,
+      "safetyInspection",
+      input.safetyInspectionFile,
+      isAdmin
+    );
+    const filtered = nextVehicleDocuments.filter(
+      (document) => document.type !== "safetyInspection"
+    );
+    nextVehicleDocuments.length = 0;
+    nextVehicleDocuments.push(...filtered, uploadedDoc);
+  }
+
+  if (
+    !isAdmin &&
+    (!hasDocumentType(nextVehicleDocuments, "vehicleRegistration") ||
+      !hasDocumentType(nextVehicleDocuments, "safetyInspection"))
+  ) {
+    throw new Error("Chủ xe cần tải đủ đăng ký xe và kiểm định an toàn kỹ thuật.");
+  }
+
+  const payload: Omit<Truck, "id"> = {
+    ...currentTruck,
+    name: input.name,
+    brand: input.brand,
+    year: input.year,
+    vehicleType: input.vehicleType,
+    pricePerDay: input.pricePerDay,
+    location: input.location,
+    capacity: input.capacity,
+    dimensions: input.dimensions,
+    cargoVolume: Number(
+      (input.dimensions.length * input.dimensions.width * input.dimensions.height).toFixed(2)
+    ),
+    fuelType: input.fuelType,
+    fuelConsumption: input.fuelConsumption,
+    images: mergedImages,
+    primaryImageUrl: resolvePrimaryImageUrl(mergedImages, input.primaryImageIndex),
+    vehicleDocuments: nextVehicleDocuments,
+    documentsApproved: isAdmin ? true : currentTruck.documentsApproved ?? false,
+    description: input.description,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await setDoc(doc(firebase.db, COLLECTIONS.trucks, currentTruck.id), payload, {
+    merge: true,
+  });
+
+  const [truck] = await enrichOwnerTrust([
+    toTruckCatalogItem({
+      id: currentTruck.id,
       ...payload,
     }),
   ]);

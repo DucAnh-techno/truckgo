@@ -20,6 +20,8 @@ export type VerificationDocumentType =
   | "authorizationLetter"
   | "other";
 
+export type VehicleDocumentType = "vehicleRegistration" | "safetyInspection";
+
 export type ReportStatus =
   | "open"
   | "investigating"
@@ -39,6 +41,16 @@ export interface VerificationDocument {
   type: VerificationDocumentType;
   url: string;
   uploadedAt: string;
+}
+
+export interface VehicleDocument {
+  id: string;
+  name: string;
+  type: VehicleDocumentType;
+  url: string;
+  uploadedAt: string;
+  approved: boolean;
+  approvedAt?: string;
 }
 
 export interface User extends TimestampFields {
@@ -73,12 +85,27 @@ export interface Truck extends TimestampFields {
   id: string;
   ownerId: string;
   name: string;
+  brand?: string;
+  year?: number;
+  vehicleType?: string;
   pricePerDay: number;
   location: string;
   capacity: number;
+  dimensions?: {
+    length: number; // m
+    width: number; // m
+    height: number; // m
+  };
+  cargoVolume?: number; // m³
+  fuelType?: string;
+  fuelConsumption?: number; // L/100km
   images: string[];
+  primaryImageUrl?: string;
+  vehicleDocuments?: VehicleDocument[];
+  documentsApproved?: boolean;
   description: string;
   isAvailable: boolean;
+  rentalCount?: number;
 }
 
 export interface Booking extends TimestampFields {

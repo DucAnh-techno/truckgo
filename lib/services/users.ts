@@ -145,33 +145,8 @@ function createDemoVerificationDoc(
 }
 
 export function getVerificationDocumentTypesForRole(role: User["role"]) {
-  if (role === "owner") {
-    return [
-      "identity",
-      "vehicleRegistration",
-      "authorizationLetter",
-      "businessLicense",
-      "other",
-    ] as const satisfies VerificationDocumentType[];
-  }
-
-  if (role === "admin") {
-    return [
-      "identity",
-      "driverLicense",
-      "vehicleRegistration",
-      "authorizationLetter",
-      "businessLicense",
-      "other",
-    ] as const satisfies VerificationDocumentType[];
-  }
-
-  return [
-    "identity",
-    "driverLicense",
-    "businessLicense",
-    "other",
-  ] as const satisfies VerificationDocumentType[];
+  void role;
+  return ["identity", "businessLicense"] as const satisfies VerificationDocumentType[];
 }
 
 export const demoUsers: Record<string, User> = {

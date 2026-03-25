@@ -144,6 +144,25 @@ export async function getBookingByTruckId(truckId: string) {
   };
 }
 
+export async function getBookingCountByTruckId(truckId: string) {
+  if (!canUseFirebaseRead()) {
+    return demoBookings.filter(
+      (booking) =>
+        booking.truckId === truckId &&
+        (booking.status === "confirmed" || booking.status === "completed")
+    ).length;
+  }
+
+  const bookingsQuery = query(
+    collection(db!, COLLECTIONS.bookings),
+    where("truckId", "==", truckId),
+    where("status", "in", ["confirmed", "completed"])
+  );
+  const snapshot = await getDocs(bookingsQuery);
+
+  return snapshot.size;
+}
+
 export interface CreateBookingInput {
   truckId: string;
   renterId: string;
