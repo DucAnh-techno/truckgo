@@ -8,24 +8,37 @@ import { getReviewsForTargetUser, getReviewSummaryForUser } from "@/lib/services
 import { getPublicUserProfilesByIds } from "@/lib/services/users";
 import type { User } from "@/types";
 
+type ProfileReviewsPanelUser = Pick<
+  User,
+  "id" | "isVerified" | "verificationStatus" | "createdAt" | "role"
+>;
+
 interface ProfileReviewsPanelProps {
-  user: User;
+  userId?: string;
+  user?: ProfileReviewsPanelUser;
 }
 
-export function ProfileReviewsPanel({ user }: ProfileReviewsPanelProps) {
+export function ProfileReviewsPanel({ userId, user }: ProfileReviewsPanelProps) {
+  const targetUserId = user?.id ?? userId;
+
   const [reviews, setReviews] = useState<ReviewListItem[]>([]);
   const [avgRating, setAvgRating] = useState(0);
   const [totalReviews, setTotalReviews] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
+    if (!targetUserId) {
+      setErrorMessage("Không tìm thấy người dùng để tải đánh giá.");
+      return;
+    }
+
     let active = true;
 
     async function loadReviews() {
       try {
         const [nextReviews, summary] = await Promise.all([
-          getReviewsForTargetUser(user.id),
-          getReviewSummaryForUser(user.id),
+          getReviewsForTargetUser(targetUserId),
+          getReviewSummaryForUser(targetUserId),
         ]);
         const reviewerProfiles = await getPublicUserProfilesByIds(
           nextReviews.map((review) => review.reviewerId)
@@ -63,7 +76,7 @@ export function ProfileReviewsPanel({ user }: ProfileReviewsPanelProps) {
     return () => {
       active = false;
     };
-  }, [user.id]);
+  }, [targetUserId]);
 
   return (
     <section className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
@@ -75,14 +88,20 @@ export function ProfileReviewsPanel({ user }: ProfileReviewsPanelProps) {
         </p>
 
         <div className="mt-6">
-          <TrustSummary
-            isVerified={user.isVerified}
-            verificationStatus={user.verificationStatus}
-            avgRating={avgRating}
-            totalReviews={totalReviews}
-            memberSince={user.createdAt}
-            role={user.role}
-          />
+          {user ? (
+            <TrustSummary
+              isVerified={user.isVerified}
+              verificationStatus={user.verificationStatus}
+              avgRating={avgRating}
+              totalReviews={totalReviews}
+              memberSince={user.createdAt}
+              role={user.role}
+            />
+          ) : (
+            <div className="rounded-3xl bg-white/10 p-5 text-sm text-white/80">
+              Không có dữ liệu hồ sơ công khai để hiển thị mức độ uy tín.
+            </div>
+          )}
         </div>
       </div>
 

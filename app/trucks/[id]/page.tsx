@@ -211,6 +211,20 @@ export default async function TruckDetailPage({ params }: TruckDetailPageProps) 
               <div className="pt-2">
                 <ReportButton targetId={truck.ownerId} targetType="user" />
               </div>
+              <div className="mt-3 flex gap-2">
+                <a
+                  href={`/owners/${truck.ownerId}`}
+                  className="rounded-full border border-stone-200 px-4 py-2 text-sm font-semibold text-stone-700 transition hover:border-stone-900 hover:text-stone-950"
+                >
+                  Xem trang chủ xe
+                </a>
+                <a
+                  href={`/chat/${truck.ownerId}`}
+                  className="rounded-full bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-100"
+                >
+                  Nhắn chủ xe
+                </a>
+              </div>
 
               <EditTruckButton truckId={truck.id} ownerId={truck.ownerId} />
               <DeleteTruckButton truckId={truck.id} ownerId={truck.ownerId} />

@@ -6,6 +6,8 @@ export type BookingStatus =
   | "cancelled"
   | "completed";
 
+export type BookingPaymentStatus = "unpaid" | "paid";
+
 export type VerificationStatus =
   | "unsubmitted"
   | "pending"
@@ -116,7 +118,13 @@ export interface Booking extends TimestampFields {
   startDate: string;
   endDate: string;
   totalPrice: number;
+  loadingService?: boolean;
+  loadingServiceFee?: number;
   status: BookingStatus;
+  paymentStatus?: BookingPaymentStatus;
+  paidAt?: string;
+  paymentMethod?: string;
+  paymentNote?: string;
 }
 
 export interface Review extends TimestampFields {
@@ -132,6 +140,13 @@ export interface Review extends TimestampFields {
 export interface Message extends TimestampFields {
   id: string;
   bookingId: string;
+  senderId: string;
+  text: string;
+}
+
+export interface OwnerMessage extends TimestampFields {
+  id: string;
+  ownerId: string;
   senderId: string;
   text: string;
 }
@@ -155,6 +170,7 @@ export interface FirestoreCollections {
   bookings: Booking;
   reviews: Review;
   messages: Message;
+  ownerMessages: OwnerMessage;
   reports: Report;
 }
 
@@ -165,5 +181,6 @@ export const COLLECTIONS = {
   bookings: "bookings",
   reviews: "reviews",
   messages: "messages",
+  ownerMessages: "ownerMessages",
   reports: "reports",
 } as const;

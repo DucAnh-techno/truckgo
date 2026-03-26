@@ -25,6 +25,7 @@ export function TruckCard({ truck }: TruckCardProps) {
             src={heroImage}
             alt={truck.name}
             fill
+            sizes="(max-width: 640px) 100vw, 33vw"
             className="object-cover object-center transition-transform duration-300 group-hover:scale-105"
           />
         ) : (

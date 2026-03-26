@@ -39,12 +39,15 @@ export function TruckImageGallery({
 
   return (
     <div className="space-y-3">
-      <div className="relative h-80 overflow-hidden rounded-[40px] border border-stone-200 bg-stone-100">
+      <div className="relative h-100 overflow-hidden rounded-[40px] border border-stone-200 bg-stone-100">
         {mainImage ? (
           <Image
             src={mainImage}
             alt="Ảnh xe"
             fill
+            loading="eager"
+            fetchPriority="high"
+            sizes="(max-width: 768px) 100vw, (max-width: 1280px) 65vw, 720px"
             onClick={() => setIsZoomed((previous) => !previous)}
             className={`cursor-zoom-in object-cover transition duration-200 ${
               isZoomed ? "scale-110" : "scale-100"

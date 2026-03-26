@@ -1,4 +1,5 @@
 import type {
+  BookingPaymentStatus,
   BookingStatus,
   ReportStatus,
   ReportTargetType,
@@ -30,6 +31,17 @@ export function getBookingStatusLabel(status: BookingStatus | string) {
       return "Đã hủy";
     case "completed":
       return "Hoàn tất";
+    default:
+      return status;
+  }
+}
+
+export function getPaymentStatusLabel(status: BookingPaymentStatus | string) {
+  switch (status) {
+    case "paid":
+      return "Đã thanh toán";
+    case "unpaid":
+      return "Chưa thanh toán";
     default:
       return status;
   }

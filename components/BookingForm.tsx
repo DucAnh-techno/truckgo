@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/providers/AuthProvider";
 import { createBooking } from "@/lib/services/bookings";
@@ -39,8 +40,10 @@ export function BookingForm({
   );
   const [resolvedOwnerId, setResolvedOwnerId] = useState("");
   const [note, setNote] = useState("");
+  const [includeLoadingService, setIncludeLoadingService] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const router = useRouter();
 
   useEffect(() => {
     let active = true;
@@ -83,7 +86,8 @@ export function BookingForm({
   }, [pricePerDay, truckId, truckName]);
 
   const rentalDays = calculateRentalDays(startDate, endDate);
-  const totalPrice = rentalDays * resolvedPricePerDay;
+  const LOADING_FEE = 200000; // flat fee for bốc xếp
+  const totalPrice = rentalDays * resolvedPricePerDay + (includeLoadingService ? LOADING_FEE : 0);
   const isOwnTruck = Boolean(profile && resolvedOwnerId && profile.id === resolvedOwnerId);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -115,13 +119,20 @@ export function BookingForm({
           throw new Error("Bạn không thể thuê chính chiếc xe do mình đăng.");
         }
 
-        await createBooking({
+        const booking = await createBooking({
           truckId: resolvedTruckId,
           renterId: profile.id,
           startDate,
           endDate,
+          loadingService: includeLoadingService,
         });
         await onSubmitted?.();
+
+        // redirect renter to checkout page to complete payment
+        if (booking?.id) {
+          router.push(`/bookings/checkout/${booking.id}`);
+          return;
+        }
 
         setSuccessMessage(
           `Booking đã được tạo với trạng thái chờ xác nhận.${note ? " Ghi chú của bạn đã được lưu trong phiên đặt này." : ""}`
@@ -193,6 +204,16 @@ export function BookingForm({
           placeholder="Cần tài xế, cần xuất hóa đơn, cần giao xe sớm..."
           className="w-full rounded-2xl border border-stone-200 px-4 py-3 outline-none transition focus:border-orange-400"
         />
+      </label>
+
+      <label className="flex items-center gap-3">
+        <input
+          type="checkbox"
+          checked={includeLoadingService}
+          onChange={(e) => setIncludeLoadingService(e.target.checked)}
+          className="h-4 w-4 rounded border-stone-300 text-orange-600"
+        />
+        <span className="text-sm text-stone-700">Bao gồm dịch vụ bốc xếp (Phí cố định: {formatCurrency(LOADING_FEE)})</span>
       </label>
 
       {!isConfigured ? (

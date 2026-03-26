@@ -16,11 +16,15 @@ import { getReviewsByReviewer } from "@/lib/services/reviews";
 import { getTruckById } from "@/lib/services/trucks";
 import { getPublicUserProfilesByIds } from "@/lib/services/users";
 import { formatCurrency, formatDateRange } from "@/lib/utils/format";
-import { getBookingStatusLabel } from "@/lib/utils/labels";
+import { getBookingStatusLabel, getPaymentStatusLabel } from "@/lib/utils/labels";
 import type { Review } from "@/types";
 
 interface BookingsPageProps {
-  searchParams: Promise<{ truckId?: string | string[] }>;
+  searchParams: Promise<{
+    truckId?: string | string[];
+    payment?: string | string[];
+    bookingId?: string | string[];
+  }>;
 }
 
 function readSearchValue(value?: string | string[]) {
@@ -40,18 +44,23 @@ interface BookingViewModel {
   startDate: string;
   endDate: string;
   status: string;
+  paymentStatus: string;
+  paidAt?: string;
   totalPrice: number;
   createdAt: string;
 }
 
 export default function BookingsPage({ searchParams }: BookingsPageProps) {
   const { profile, isConfigured, isLoading } = useAuth();
-  const { truckId } = use(searchParams);
+  const { truckId, payment, bookingId } = use(searchParams);
   const selectedTruckId = readSearchValue(truckId);
+  const paymentStatusQuery = readSearchValue(payment);
+  const paidBookingId = readSearchValue(bookingId);
   const [bookings, setBookings] = useState<BookingViewModel[]>([]);
   const [reviewMap, setReviewMap] = useState<Map<string, Review>>(new Map());
   const [errorMessage, setErrorMessage] = useState("");
   const [isPageLoading, setIsPageLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState<"all" | "paid">("all");
 
   const loadBookingsForCurrentUser = useCallback(async (userId: string) => {
     setIsPageLoading(true);
@@ -84,6 +93,8 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
           startDate: booking.startDate,
           endDate: booking.endDate,
           status: booking.status,
+          paymentStatus: booking.paymentStatus ?? "unpaid",
+          paidAt: booking.paidAt,
           totalPrice: booking.totalPrice,
           createdAt: booking.createdAt,
         }))
@@ -125,6 +136,17 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
 
     void loadBookingsForCurrentUser(profile.id);
   }, [loadBookingsForCurrentUser, profile]);
+
+  useEffect(() => {
+    if (paymentStatusQuery === "success") {
+      setActiveFilter("paid");
+    }
+  }, [paymentStatusQuery]);
+
+  const filteredBookings =
+    activeFilter === "paid"
+      ? bookings.filter((booking) => (booking.paymentStatus ?? "unpaid") === "paid")
+      : bookings;
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
@@ -209,6 +231,37 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
           </div>
         ) : null}
 
+        {paymentStatusQuery === "success" ? (
+          <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            Đã ghi nhận thanh toán thành công{paidBookingId ? ` cho booking #${paidBookingId}` : ""}.
+          </div>
+        ) : null}
+
+        <div className="mt-6 inline-flex rounded-full border border-stone-200 bg-stone-100 p-1">
+          <button
+            type="button"
+            onClick={() => setActiveFilter("all")}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+              activeFilter === "all"
+                ? "bg-white text-stone-900 shadow-sm"
+                : "text-stone-600 hover:text-stone-900"
+            }`}
+          >
+            Tất cả
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveFilter("paid")}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+              activeFilter === "paid"
+                ? "bg-white text-stone-900 shadow-sm"
+                : "text-stone-600 hover:text-stone-900"
+            }`}
+          >
+            Đã thanh toán
+          </button>
+        </div>
+
         <div className="mt-6 space-y-4">
           {isPageLoading ? (
             Array.from({ length: 3 }).map((_, index) => (
@@ -217,8 +270,8 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
                 className="min-h-32 animate-pulse rounded-[26px] border border-stone-200 bg-white"
               />
             ))
-          ) : bookings.length > 0 ? (
-            bookings.map((booking) => (
+          ) : filteredBookings.length > 0 ? (
+            filteredBookings.map((booking) => (
               <article
                 key={booking.id}
                 className="space-y-4 rounded-[26px] border border-stone-200 bg-white p-5"
@@ -227,6 +280,9 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
                   <div>
                     <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-500">
                       {getBookingStatusLabel(booking.status)}
+                    </p>
+                    <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                      {getPaymentStatusLabel(booking.paymentStatus)}
                     </p>
                     <h3 className="mt-2 text-xl font-semibold text-stone-950">
                       {booking.truckName}
@@ -246,6 +302,14 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
                         {formatCurrency(booking.totalPrice)}
                       </p>
                     </div>
+                    {booking.paymentStatus === "unpaid" && booking.status !== "cancelled" ? (
+                      <Link
+                        href={`/bookings/checkout/${booking.id}`}
+                        className="rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-600 transition hover:border-orange-300 hover:bg-orange-100"
+                      >
+                        Tiếp tục thanh toán
+                      </Link>
+                    ) : null}
                     {booking.status === "pending" || booking.status === "confirmed" ? (
                       <button
                         type="button"
@@ -286,7 +350,9 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
             ))
           ) : (
             <div className="rounded-[26px] border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-600">
-              Chưa có booking nào cho tài khoản này.
+              {activeFilter === "paid"
+                ? "Chưa có booking nào đã thanh toán."
+                : "Chưa có booking nào cho tài khoản này."}
             </div>
           )}
         </div>

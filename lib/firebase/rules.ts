@@ -99,6 +99,7 @@ service cloud.firestore {
         && request.resource.data.renterId == request.auth.uid
         && currentUser().role in ["owner", "renter", "admin"]
         && request.resource.data.status == "pending"
+        && request.resource.data.paymentStatus == "unpaid"
         && request.resource.data.renterId != request.resource.data.ownerId
         && get(/databases/$(database)/documents/trucks/$(request.resource.data.truckId)).data.ownerId
           == request.resource.data.ownerId
@@ -112,8 +113,22 @@ service cloud.firestore {
       ) || (
         isSignedIn()
         && resource.data.renterId == request.auth.uid
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["status", "updatedAt"])
-        && request.resource.data.status == "cancelled"
+        && (
+          (
+            request.resource.data.diff(resource.data).changedKeys().hasOnly(["status", "updatedAt"])
+            && request.resource.data.status == "cancelled"
+          ) || (
+            request.resource.data.diff(resource.data).changedKeys().hasOnly([
+              "paymentStatus",
+              "paidAt",
+              "paymentMethod",
+              "paymentNote",
+              "updatedAt"
+            ])
+            && (!("paymentStatus" in resource.data) || resource.data.paymentStatus == "unpaid")
+            && request.resource.data.paymentStatus == "paid"
+          )
+        )
       );
 
       allow delete: if isAdmin();
@@ -163,6 +178,20 @@ service cloud.firestore {
           get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.renterId
             == request.auth.uid
         );
+      allow update, delete: if isAdmin() || (
+        isSignedIn() && resource.data.senderId == request.auth.uid
+      );
+    }
+
+    match /ownerMessages/{messageId} {
+      allow read: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        resource.data.senderId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.text.size() > 0;
       allow update, delete: if isAdmin() || (
         isSignedIn() && resource.data.senderId == request.auth.uid
       );

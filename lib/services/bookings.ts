@@ -25,6 +25,9 @@ const demoBookings: Booking[] = [
     endDate: "2026-03-27",
     totalPrice: 5400000,
     status: "confirmed",
+    paymentStatus: "paid",
+    paidAt: "2026-03-19T10:15:00.000Z",
+    paymentMethod: "bank_transfer",
     createdAt: "2026-03-19T09:00:00.000Z",
     updatedAt: "2026-03-19T11:00:00.000Z",
   },
@@ -37,6 +40,7 @@ const demoBookings: Booking[] = [
     endDate: "2026-03-29",
     totalPrice: 1250000,
     status: "pending",
+    paymentStatus: "unpaid",
     createdAt: "2026-03-20T07:30:00.000Z",
     updatedAt: "2026-03-20T07:30:00.000Z",
   },
@@ -49,10 +53,20 @@ const demoBookings: Booking[] = [
     endDate: "2026-03-24",
     totalPrice: 3100000,
     status: "completed",
+    paymentStatus: "paid",
+    paidAt: "2026-03-16T12:00:00.000Z",
+    paymentMethod: "bank_transfer",
     createdAt: "2026-03-16T10:15:00.000Z",
     updatedAt: "2026-03-18T18:00:00.000Z",
   },
 ];
+
+function normalizeBooking(booking: Booking): Booking {
+  return {
+    ...booking,
+    paymentStatus: booking.paymentStatus ?? "unpaid",
+  };
+}
 
 function canUseFirebaseRead() {
   return isFirebaseConfigured && !!db;
@@ -78,10 +92,12 @@ export async function getBookingsForOwner(ownerId: string) {
   const snapshot = await getDocs(bookingsQuery);
 
   return sortBookings(
-    snapshot.docs.map((item) => ({
-      id: item.id,
-      ...(item.data() as Omit<Booking, "id">),
-    }))
+    snapshot.docs.map((item) =>
+      normalizeBooking({
+        id: item.id,
+        ...(item.data() as Omit<Booking, "id">),
+      })
+    )
   );
 }
 
@@ -99,16 +115,19 @@ export async function getBookingsForRenter(renterId: string) {
   const snapshot = await getDocs(bookingsQuery);
 
   return sortBookings(
-    snapshot.docs.map((item) => ({
-      id: item.id,
-      ...(item.data() as Omit<Booking, "id">),
-    }))
+    snapshot.docs.map((item) =>
+      normalizeBooking({
+        id: item.id,
+        ...(item.data() as Omit<Booking, "id">),
+      })
+    )
   );
 }
 
 export async function getBookingById(bookingId: string) {
   if (!canUseFirebaseRead()) {
-    return demoBookings.find((booking) => booking.id === bookingId) ?? null;
+    const booking = demoBookings.find((item) => item.id === bookingId) ?? null;
+    return booking ? normalizeBooking(booking) : null;
   }
 
   const snapshot = await getDoc(doc(db!, COLLECTIONS.bookings, bookingId));
@@ -116,15 +135,16 @@ export async function getBookingById(bookingId: string) {
     return null;
   }
 
-  return {
+  return normalizeBooking({
     id: snapshot.id,
     ...(snapshot.data() as Omit<Booking, "id">),
-  };
+  });
 }
 
 export async function getBookingByTruckId(truckId: string) {
   if (!canUseFirebaseRead()) {
-    return demoBookings.find((booking) => booking.truckId === truckId) ?? null;
+    const booking = demoBookings.find((item) => item.truckId === truckId) ?? null;
+    return booking ? normalizeBooking(booking) : null;
   }
 
   const bookingsQuery = query(
@@ -138,10 +158,10 @@ export async function getBookingByTruckId(truckId: string) {
     return null;
   }
 
-  return {
+  return normalizeBooking({
     id: booking.id,
     ...(booking.data() as Omit<Booking, "id">),
-  };
+  });
 }
 
 export async function getBookingCountByTruckId(truckId: string) {
@@ -168,6 +188,7 @@ export interface CreateBookingInput {
   renterId: string;
   startDate: string;
   endDate: string;
+  loadingService?: boolean;
 }
 
 export async function createBooking(input: CreateBookingInput) {
@@ -207,6 +228,7 @@ export async function createBooking(input: CreateBookingInput) {
   }
 
   const rentalDays = calculateRentalDays(input.startDate, input.endDate);
+  const LOADING_FEE = 200000;
 
   const payload: Omit<Booking, "id"> = {
     truckId: truck.id,
@@ -216,9 +238,17 @@ export async function createBooking(input: CreateBookingInput) {
     endDate: input.endDate,
     totalPrice: truck.pricePerDay * rentalDays,
     status: "pending",
+    paymentStatus: "unpaid",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
+
+  // include optional loading service fee
+  if (input.loadingService) {
+    payload.loadingService = true;
+    payload.loadingServiceFee = LOADING_FEE;
+    payload.totalPrice += LOADING_FEE;
+  }
 
   const reference = await addDoc(
     collection(firebase.db, COLLECTIONS.bookings),
@@ -228,6 +258,48 @@ export async function createBooking(input: CreateBookingInput) {
   return {
     id: reference.id,
     ...payload,
+  };
+}
+
+export async function markBookingPaid(bookingId: string, actorId: string) {
+  const firebase = ensureFirebaseConfigured();
+  const booking = await getBookingById(bookingId);
+  const actor = await getUserProfileById(actorId);
+
+  if (!booking) {
+    throw new Error("Không tìm thấy booking để xác nhận thanh toán.");
+  }
+
+  if (!actor) {
+    throw new Error("Không tìm thấy tài khoản đang thao tác.");
+  }
+
+  const isAdmin = actor.role === "admin";
+  const isRenter = booking.renterId === actorId;
+
+  if (!isAdmin && !isRenter) {
+    throw new Error("Bạn không có quyền xác nhận thanh toán cho booking này.");
+  }
+
+  if ((booking.paymentStatus ?? "unpaid") === "paid") {
+    return booking;
+  }
+
+  const paidAt = new Date().toISOString();
+  const paymentUpdate = {
+    paymentStatus: "paid",
+    paidAt,
+    paymentMethod: booking.paymentMethod ?? "bank_transfer",
+    updatedAt: paidAt,
+  };
+
+  await setDoc(doc(firebase.db, COLLECTIONS.bookings, bookingId), paymentUpdate, {
+    merge: true,
+  });
+
+  return {
+    ...booking,
+    ...paymentUpdate,
   };
 }
 
