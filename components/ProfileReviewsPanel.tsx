@@ -32,13 +32,15 @@ export function ProfileReviewsPanel({ userId, user }: ProfileReviewsPanelProps) 
       return;
     }
 
+    const resolvedTargetUserId = targetUserId;
+
     let active = true;
 
     async function loadReviews() {
       try {
         const [nextReviews, summary] = await Promise.all([
-          getReviewsForTargetUser(targetUserId),
-          getReviewSummaryForUser(targetUserId),
+          getReviewsForTargetUser(resolvedTargetUserId),
+          getReviewSummaryForUser(resolvedTargetUserId),
         ]);
         const reviewerProfiles = await getPublicUserProfilesByIds(
           nextReviews.map((review) => review.reviewerId)

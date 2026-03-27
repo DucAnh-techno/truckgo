@@ -2,10 +2,10 @@ import Link from "next/link";
 
 import { OwnerBookingsPanel } from "@/components/OwnerBookingsPanel";
 import { ProfileReviewsPanel } from "@/components/ProfileReviewsPanel";
-import { getOwnerTrucks } from "@/lib/services/trucks";
+import { getOwnerTrucks, type TruckCatalogItem } from "@/lib/services/trucks";
 import { getPublicUserProfileById } from "@/lib/services/users";
 import { formatCurrency } from "@/lib/utils/format";
-import type { PublicUserProfile } from "@/types";
+import type { PublicUserProfile, User } from "@/types";
 
 interface OwnerPageProps {
   params: Promise<{ ownerId: string }>;
@@ -15,7 +15,7 @@ export default async function OwnerPage({ params }: OwnerPageProps) {
   const { ownerId } = await params;
 
   let owner: PublicUserProfile | null = null;
-  let trucks = [];
+  let trucks: TruckCatalogItem[] = [];
 
   try {
     owner = await getPublicUserProfileById(ownerId);
@@ -23,6 +23,18 @@ export default async function OwnerPage({ params }: OwnerPageProps) {
   } catch (error) {
     // ignore - show fallback
   }
+
+  const reviewPanelUser = owner
+    ? {
+        id: owner.id,
+        isVerified: owner.isVerified,
+        verificationStatus: (owner.isVerified
+          ? "verified"
+          : "unsubmitted") as User["verificationStatus"],
+        createdAt: owner.createdAt,
+        role: owner.role,
+      }
+    : undefined;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -60,7 +72,7 @@ export default async function OwnerPage({ params }: OwnerPageProps) {
             <h3 className="text-lg font-semibold">Xe của chủ xe</h3>
             <div className="mt-4 grid gap-4">
               {trucks.length > 0 ? (
-                trucks.map((truck: any) => (
+                trucks.map((truck) => (
                   <div key={truck.id} className="flex items-center justify-between rounded-2xl bg-stone-50 px-4 py-3">
                     <div>
                       <p className="text-sm font-semibold">{truck.name}</p>
@@ -81,7 +93,7 @@ export default async function OwnerPage({ params }: OwnerPageProps) {
       </section>
 
       <section className="mt-8">
-        <ProfileReviewsPanel userId={ownerId} user={owner ?? undefined} />
+        <ProfileReviewsPanel userId={ownerId} user={reviewPanelUser} />
       </section>
     </div>
   );
