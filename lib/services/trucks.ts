@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
+import { FirebaseError } from "firebase/app";
 import {
   collection,
   deleteDoc,
@@ -243,7 +244,20 @@ async function uploadVehicleDocument(
       extension ? `.${extension}` : ""
     }`
   );
-  const snapshot = await uploadBytes(storageRef, file);
+  let snapshot;
+
+  try {
+    snapshot = await uploadBytes(storageRef, file);
+  } catch (error) {
+    if (error instanceof FirebaseError && error.code === "storage/unauthorized") {
+      throw new Error(
+        "Khong co quyen tai giay to xe len Firebase Storage. Hay cap nhat Storage Rules cho duong dan truck-docs/{uid}/... va dam bao ban dang dang nhap dung tai khoan chu xe."
+      );
+    }
+
+    throw error;
+  }
+
   const now = new Date().toISOString();
 
   return {

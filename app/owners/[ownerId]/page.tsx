@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { OwnerBookingsPanel } from "@/components/OwnerBookingsPanel";
 import { ProfileReviewsPanel } from "@/components/ProfileReviewsPanel";
 import { getOwnerTrucks, type TruckCatalogItem } from "@/lib/services/trucks";
 import { getPublicUserProfileById } from "@/lib/services/users";
