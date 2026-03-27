@@ -23,9 +23,13 @@ const demoBookings: Booking[] = [
     ownerId: "owner_01",
     startDate: "2026-03-24",
     endDate: "2026-03-27",
+    deliveryAddress: "137 Nguyen Thi Thap, Quan 7, TP.HCM",
+    deliveryLat: 10.7297,
+    deliveryLng: 106.7064,
     totalPrice: 5400000,
-    status: "confirmed",
+    status: "accepted",
     paymentStatus: "paid",
+    acceptedAt: "2026-03-19T10:20:00.000Z",
     paidAt: "2026-03-19T10:15:00.000Z",
     paymentMethod: "bank_transfer",
     createdAt: "2026-03-19T09:00:00.000Z",
@@ -38,6 +42,9 @@ const demoBookings: Booking[] = [
     ownerId: "owner_01",
     startDate: "2026-03-28",
     endDate: "2026-03-29",
+    deliveryAddress: "52 Le Van Viet, Thu Duc, TP.HCM",
+    deliveryLat: 10.8432,
+    deliveryLng: 106.7918,
     totalPrice: 1250000,
     status: "pending",
     paymentStatus: "unpaid",
@@ -51,9 +58,15 @@ const demoBookings: Booking[] = [
     ownerId: "owner_02",
     startDate: "2026-03-22",
     endDate: "2026-03-24",
+    deliveryAddress: "15 Tran Phu, Hai Chau, Da Nang",
+    deliveryLat: 16.0678,
+    deliveryLng: 108.2208,
     totalPrice: 3100000,
     status: "completed",
     paymentStatus: "paid",
+    acceptedAt: "2026-03-16T12:05:00.000Z",
+    receivedAt: "2026-03-22T08:00:00.000Z",
+    completedAt: "2026-03-24T17:00:00.000Z",
     paidAt: "2026-03-16T12:00:00.000Z",
     paymentMethod: "bank_transfer",
     createdAt: "2026-03-16T10:15:00.000Z",
@@ -62,9 +75,22 @@ const demoBookings: Booking[] = [
 ];
 
 function normalizeBooking(booking: Booking): Booking {
+  const normalizedStatus =
+    booking.status === "confirmed" ? "accepted" : booking.status;
+
   return {
     ...booking,
+    status: normalizedStatus,
     paymentStatus: booking.paymentStatus ?? "unpaid",
+    deliveryAddress: booking.deliveryAddress ?? "Chưa cập nhật địa điểm giao xe",
+    deliveryLat:
+      typeof booking.deliveryLat === "number" && Number.isFinite(booking.deliveryLat)
+        ? booking.deliveryLat
+        : 0,
+    deliveryLng:
+      typeof booking.deliveryLng === "number" && Number.isFinite(booking.deliveryLng)
+        ? booking.deliveryLng
+        : 0,
   };
 }
 
@@ -76,6 +102,46 @@ function sortBookings<T extends Booking>(bookings: T[]) {
   return [...bookings].sort((left, right) =>
     right.createdAt.localeCompare(left.createdAt)
   );
+}
+
+function dateOnlyToTimestamp(value: string) {
+  return new Date(`${value}T00:00:00`).getTime();
+}
+
+function rangesOverlap(
+  startA: string,
+  endA: string,
+  startB: string,
+  endB: string
+) {
+  const aStart = dateOnlyToTimestamp(startA);
+  const aEnd = dateOnlyToTimestamp(endA);
+  const bStart = dateOnlyToTimestamp(startB);
+  const bEnd = dateOnlyToTimestamp(endB);
+
+  return aStart < bEnd && bStart < aEnd;
+}
+
+async function getBlockingBookingsForTruck(
+  truckId: string,
+  excludedBookingId?: string
+) {
+  const snapshot = await getDocs(
+    query(collection(db!, COLLECTIONS.bookings), where("truckId", "==", truckId))
+  );
+
+  return snapshot.docs
+    .map((item) =>
+      normalizeBooking({
+        id: item.id,
+        ...(item.data() as Omit<Booking, "id">),
+      })
+    )
+    .filter(
+      (booking) =>
+        booking.id !== excludedBookingId &&
+        (booking.status === "accepted" || booking.status === "in_progress")
+    );
 }
 
 export async function getBookingsForOwner(ownerId: string) {
@@ -169,14 +235,16 @@ export async function getBookingCountByTruckId(truckId: string) {
     return demoBookings.filter(
       (booking) =>
         booking.truckId === truckId &&
-        (booking.status === "confirmed" || booking.status === "completed")
+        (booking.status === "accepted" ||
+          booking.status === "in_progress" ||
+          booking.status === "completed")
     ).length;
   }
 
   const bookingsQuery = query(
     collection(db!, COLLECTIONS.bookings),
     where("truckId", "==", truckId),
-    where("status", "in", ["confirmed", "completed"])
+    where("status", "in", ["accepted", "in_progress", "completed"])
   );
   const snapshot = await getDocs(bookingsQuery);
 
@@ -188,7 +256,60 @@ export interface CreateBookingInput {
   renterId: string;
   startDate: string;
   endDate: string;
+  deliveryAddress: string;
+  deliveryLat: number;
+  deliveryLng: number;
   loadingService?: boolean;
+}
+
+export interface BookedDateRange {
+  bookingId: string;
+  startDate: string;
+  endDate: string;
+  status: Booking["status"];
+}
+
+export async function getBookedDateRangesByTruckId(
+  truckId: string
+): Promise<BookedDateRange[]> {
+  if (!canUseFirebaseRead()) {
+    return demoBookings
+      .filter(
+        (booking) =>
+          booking.truckId === truckId &&
+          (booking.status === "accepted" || booking.status === "in_progress")
+      )
+      .map((booking) => ({
+        bookingId: booking.id,
+        startDate: booking.startDate,
+        endDate: booking.endDate,
+        status: booking.status,
+      }))
+      .sort((left, right) => left.startDate.localeCompare(right.startDate));
+  }
+
+  const snapshot = await getDocs(
+    query(collection(db!, COLLECTIONS.bookings), where("truckId", "==", truckId))
+  );
+
+  return snapshot.docs
+    .map((item) =>
+      normalizeBooking({
+        id: item.id,
+        ...(item.data() as Omit<Booking, "id">),
+      })
+    )
+    .filter(
+      (booking) =>
+        booking.status === "accepted" || booking.status === "in_progress"
+    )
+    .map((booking) => ({
+      bookingId: booking.id,
+      startDate: booking.startDate,
+      endDate: booking.endDate,
+      status: booking.status,
+    }))
+    .sort((left, right) => left.startDate.localeCompare(right.startDate));
 }
 
 export async function createBooking(input: CreateBookingInput) {
@@ -227,6 +348,29 @@ export async function createBooking(input: CreateBookingInput) {
     throw new Error("Xe này hiện tạm thời không khả dụng để đặt.");
   }
 
+  const deliveryAddress = input.deliveryAddress.trim();
+  if (!deliveryAddress) {
+    throw new Error("Vui lòng nhập địa điểm giao xe.");
+  }
+
+  if (!Number.isFinite(input.deliveryLat) || !Number.isFinite(input.deliveryLng)) {
+    throw new Error("Vui lòng chọn vị trí giao xe hợp lệ trên bản đồ.");
+  }
+
+  const blockingBookings = await getBlockingBookingsForTruck(truck.id);
+  const hasConflict = blockingBookings.some((existingBooking) =>
+    rangesOverlap(
+      input.startDate,
+      input.endDate,
+      existingBooking.startDate,
+      existingBooking.endDate
+    )
+  );
+
+  if (hasConflict) {
+    throw new Error("Khung thời gian này đã có lịch thuê. Vui lòng chọn ngày khác.");
+  }
+
   const rentalDays = calculateRentalDays(input.startDate, input.endDate);
   const LOADING_FEE = 200000;
 
@@ -236,6 +380,9 @@ export async function createBooking(input: CreateBookingInput) {
     ownerId: truck.ownerId,
     startDate: input.startDate,
     endDate: input.endDate,
+    deliveryAddress,
+    deliveryLat: Number(input.deliveryLat.toFixed(7)),
+    deliveryLng: Number(input.deliveryLng.toFixed(7)),
     totalPrice: truck.pricePerDay * rentalDays,
     status: "pending",
     paymentStatus: "unpaid",
@@ -328,27 +475,82 @@ export async function updateBookingStatus(
     throw new Error("Bạn không có quyền cập nhật booking này.");
   }
 
-  if (isRenter && status !== "cancelled") {
-    throw new Error("Người thuê chỉ có thể hủy booking của mình.");
+  const now = new Date().toISOString();
+
+  if (!isAdmin) {
+    if (isOwner) {
+      if (status === "accepted") {
+        if (booking.status !== "pending") {
+          throw new Error("Đơn này không còn ở trạng thái chờ nhận.");
+        }
+
+        if ((booking.paymentStatus ?? "unpaid") !== "paid") {
+          throw new Error("Chỉ có thể nhận đơn sau khi khách hàng đã thanh toán.");
+        }
+
+        const blockingBookings = await getBlockingBookingsForTruck(
+          booking.truckId,
+          booking.id
+        );
+        const hasConflict = blockingBookings.some((existingBooking) =>
+          rangesOverlap(
+            booking.startDate,
+            booking.endDate,
+            existingBooking.startDate,
+            existingBooking.endDate
+          )
+        );
+
+        if (hasConflict) {
+          throw new Error("Xe đã có lịch thuê trong khung thời gian này.");
+        }
+      } else if (status === "completed") {
+        if (booking.status !== "in_progress") {
+          throw new Error("Chỉ có thể hoàn tất khi khách đã xác nhận nhận xe.");
+        }
+      } else {
+        throw new Error("Chủ xe chỉ có thể nhận đơn hoặc hoàn tất đơn hàng.");
+      }
+    }
+
+    if (isRenter) {
+      if (status === "cancelled") {
+        if (booking.status !== "pending") {
+          throw new Error("Chỉ có thể hủy booking trước khi chủ xe nhận đơn.");
+        }
+      } else if (status === "in_progress") {
+        if (booking.status !== "accepted") {
+          throw new Error("Bạn chỉ có thể xác nhận đã nhận xe sau khi chủ xe nhận đơn.");
+        }
+      } else {
+        throw new Error("Người thuê không có quyền chuyển trạng thái này.");
+      }
+    }
   }
 
-  if (status === "completed" && !isAdmin && !isOwner) {
-    throw new Error("Chỉ chủ xe hoặc quản trị viên mới có thể hoàn tất booking.");
-  }
-
-  if (status === "confirmed" && !isAdmin && !isOwner) {
-    throw new Error("Chỉ chủ xe hoặc quản trị viên mới có thể xác nhận booking.");
-  }
-
-  const nextBooking: Booking = {
-    ...booking,
+  const statusUpdate: Partial<Booking> = {
     status,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
   };
 
-  await setDoc(doc(firebase.db, COLLECTIONS.bookings, bookingId), nextBooking, {
+  if (status === "accepted") {
+    statusUpdate.acceptedAt = now;
+  }
+
+  if (status === "in_progress") {
+    statusUpdate.receivedAt = now;
+  }
+
+  if (status === "completed") {
+    statusUpdate.completedAt = now;
+  }
+
+  await setDoc(doc(firebase.db, COLLECTIONS.bookings, bookingId), statusUpdate, {
     merge: true,
   });
 
-  return nextBooking;
+  return {
+    ...booking,
+    ...statusUpdate,
+  };
 }

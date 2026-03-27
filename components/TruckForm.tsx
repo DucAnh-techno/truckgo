@@ -148,8 +148,32 @@ export function TruckForm({
           throw new Error("Hãy chọn ít nhất 1 hình ảnh cho bài đăng.");
         }
 
+        if (!isEditMode && newImageFiles.length === 0) {
+          throw new Error("Khi đăng xe mới, bạn cần tải ít nhất 1 ảnh mới.");
+        }
+
+        if (!isEditMode && (primaryImageIndex < 0 || primaryImageIndex >= newImageFiles.length)) {
+          throw new Error("Ảnh chính chưa hợp lệ. Hãy chọn lại ảnh chính.");
+        }
+
+        if (!name.trim()) {
+          throw new Error("Hãy nhập tên xe.") 
+        }
+
         if (!brand.trim()) {
           throw new Error("Hãy nhập hãng xe.");
+        }
+
+        if (!location.trim()) {
+          throw new Error("Hãy nhập địa điểm.")
+        }
+         
+        if (!pricePerDay || pricePerDay <= 0) {
+          throw new Error("Hãy nhập giá cho thuê.")
+        }
+
+        if (!capacity || capacity <= 0) {
+          throw new Error("Hãy nhập giá cho thuê.")
         }
 
         if (!year || year < 1900 || year > new Date().getFullYear() + 1) {
@@ -158,6 +182,10 @@ export function TruckForm({
 
         if (!vehicleType.trim()) {
           throw new Error("Hãy chọn loại xe.");
+        }
+
+        if (!description.trim()) {
+          throw new Error("Hãy nhập mô tả.");
         }
 
         if (!length || !width || !height) {
@@ -172,11 +200,19 @@ export function TruckForm({
           throw new Error("Mức tiêu hao nhiên liệu phải lớn hơn 0.");
         }
 
-        if (!isAdmin && !hasVehicleRegistration) {
+        if (!isEditMode && !vehicleRegistrationFile) {
+          throw new Error("Khi đăng xe mới, giấy đăng ký xe là bắt buộc.");
+        }
+
+        if (!isEditMode && !safetyInspectionFile) {
+          throw new Error("Khi đăng xe mới, giấy kiểm định an toàn kỹ thuật là bắt buộc.");
+        }
+
+        if (isEditMode && !isAdmin && !hasVehicleRegistration) {
           throw new Error("Chủ xe cần tải giấy đăng ký xe.");
         }
 
-        if (!isAdmin && !hasSafetyInspection) {
+        if (isEditMode && !isAdmin && !hasSafetyInspection) {
           throw new Error("Chủ xe cần tải giấy kiểm định an toàn kỹ thuật.");
         }
 
@@ -232,8 +268,8 @@ export function TruckForm({
             description,
             images: newImageFiles,
             primaryImageIndex,
-            vehicleRegistrationFile,
-            safetyInspectionFile,
+            vehicleRegistrationFile: vehicleRegistrationFile!,
+            safetyInspectionFile: safetyInspectionFile!,
           });
 
           setSuccessMessage("Đăng xe thành công. Đang chuyển sang trang chi tiết...");

@@ -43,6 +43,7 @@ interface BookingViewModel {
   ownerName: string;
   startDate: string;
   endDate: string;
+  deliveryAddress: string;
   status: string;
   paymentStatus: string;
   paidAt?: string;
@@ -92,6 +93,7 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
             ownerProfiles.get(booking.ownerId)?.name ?? booking.ownerId,
           startDate: booking.startDate,
           endDate: booking.endDate,
+          deliveryAddress: booking.deliveryAddress,
           status: booking.status,
           paymentStatus: booking.paymentStatus ?? "unpaid",
           paidAt: booking.paidAt,
@@ -122,6 +124,23 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Không thể hủy booking."
+      );
+    }
+  }
+
+  async function handleMarkReceived(bookingId: string) {
+    if (!profile) {
+      return;
+    }
+
+    try {
+      await updateBookingStatus(bookingId, profile.id, "in_progress");
+      await loadBookingsForCurrentUser(profile.id);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Không thể xác nhận đã nhận xe cho booking này."
       );
     }
   }
@@ -233,7 +252,7 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
 
         {paymentStatusQuery === "success" ? (
           <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            Đã ghi nhận thanh toán thành công{paidBookingId ? ` cho booking #${paidBookingId}` : ""}.
+            Đã ghi nhận thanh toán thành công{paidBookingId ? ` cho booking #${paidBookingId}` : ""}. Chờ chủ xe nhấn Nhận đơn, sau đó bạn có thể xác nhận Đã nhận xe.
           </div>
         ) : null}
 
@@ -291,6 +310,9 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
                       {formatDateRange(booking.startDate, booking.endDate)}
                     </p>
                     <p className="mt-1 text-sm text-stone-600">
+                      Điểm giao xe: {booking.deliveryAddress}
+                    </p>
+                    <p className="mt-1 text-sm text-stone-600">
                       Chủ xe: {booking.ownerName}
                     </p>
                   </div>
@@ -310,13 +332,22 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
                         Tiếp tục thanh toán
                       </Link>
                     ) : null}
-                    {booking.status === "pending" || booking.status === "confirmed" ? (
+                    {booking.status === "pending" ? (
                       <button
                         type="button"
                         onClick={() => handleCancelBooking(booking.id)}
                         className="rounded-full border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50"
                       >
                         Hủy booking
+                      </button>
+                    ) : null}
+                    {booking.status === "accepted" ? (
+                      <button
+                        type="button"
+                        onClick={() => handleMarkReceived(booking.id)}
+                        className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                      >
+                        Đã nhận xe
                       </button>
                     ) : null}
                   </div>

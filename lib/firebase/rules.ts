@@ -84,6 +84,9 @@ service cloud.firestore {
         isSignedIn()
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.documentsApproved == resource.data.documentsApproved
+        && request.resource.data.documentsReviewedAt == resource.data.documentsReviewedAt
+        && request.resource.data.documentsReviewedBy == resource.data.documentsReviewedBy
       );
     }
 
@@ -100,6 +103,10 @@ service cloud.firestore {
         && currentUser().role in ["owner", "renter", "admin"]
         && request.resource.data.status == "pending"
         && request.resource.data.paymentStatus == "unpaid"
+        && request.resource.data.deliveryAddress is string
+        && request.resource.data.deliveryAddress.size() > 0
+        && request.resource.data.deliveryLat is number
+        && request.resource.data.deliveryLng is number
         && request.resource.data.renterId != request.resource.data.ownerId
         && get(/databases/$(database)/documents/trucks/$(request.resource.data.truckId)).data.ownerId
           == request.resource.data.ownerId
@@ -108,15 +115,33 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         isSignedIn()
         && resource.data.ownerId == request.auth.uid
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["status", "updatedAt"])
-        && request.resource.data.status in ["confirmed", "completed", "cancelled"]
+        && (
+          (
+            request.resource.data.diff(resource.data).changedKeys().hasOnly(["status", "acceptedAt", "updatedAt"])
+            && resource.data.status == "pending"
+            && request.resource.data.status == "accepted"
+            && request.resource.data.acceptedAt is string
+            && request.resource.data.paymentStatus == "paid"
+          ) || (
+            request.resource.data.diff(resource.data).changedKeys().hasOnly(["status", "completedAt", "updatedAt"])
+            && resource.data.status == "in_progress"
+            && request.resource.data.status == "completed"
+            && request.resource.data.completedAt is string
+          )
+        )
       ) || (
         isSignedIn()
         && resource.data.renterId == request.auth.uid
         && (
           (
             request.resource.data.diff(resource.data).changedKeys().hasOnly(["status", "updatedAt"])
+            && resource.data.status == "pending"
             && request.resource.data.status == "cancelled"
+          ) || (
+            request.resource.data.diff(resource.data).changedKeys().hasOnly(["status", "receivedAt", "updatedAt"])
+            && resource.data.status == "accepted"
+            && request.resource.data.status == "in_progress"
+            && request.resource.data.receivedAt is string
           ) || (
             request.resource.data.diff(resource.data).changedKeys().hasOnly([
               "paymentStatus",

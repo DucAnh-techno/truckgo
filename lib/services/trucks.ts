@@ -12,13 +12,14 @@ import {
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
-import { COLLECTIONS, type Truck, type VehicleDocument } from "@/types";
+import { COLLECTIONS, type Booking, type Truck, type VehicleDocument } from "@/types";
 import {
   db,
   ensureFirebaseConfigured,
   isFirebaseConfigured,
 } from "@/lib/firebase/config";
 import { getReviewSummariesForUsers } from "@/lib/services/reviews";
+import { formatDate } from "@/lib/utils/format";
 import {
   getPublicUserProfilesByIds,
   getUserProfileById,
@@ -30,6 +31,7 @@ export interface TruckCatalogItem extends Truck {
   gear: string;
   fuel: string;
   tags: string[];
+  availabilityTag: string;
   accentFrom: string;
   accentTo: string;
   availableFrom: string;
@@ -44,6 +46,15 @@ export interface TruckFilters {
   location?: string;
   maxPrice?: number;
   keyword?: string;
+}
+
+export type TruckDocumentReviewDecision = "approved" | "needsMore";
+
+export interface ReviewTruckDocumentsInput {
+  truckId: string;
+  actorId: string;
+  decision: TruckDocumentReviewDecision;
+  note?: string;
 }
 
 export interface CreateTruckInput {
@@ -65,8 +76,8 @@ export interface CreateTruckInput {
   description: string;
   images: File[];
   primaryImageIndex: number;
-  vehicleRegistrationFile?: File | null;
-  safetyInspectionFile?: File | null;
+  vehicleRegistrationFile: File;
+  safetyInspectionFile: File;
 }
 
 export interface UpdateTruckInput {
@@ -115,12 +126,67 @@ function getPalette(seed: string) {
   return palette[index];
 }
 
-function toTruckCatalogItem(truck: Truck): TruckCatalogItem {
+interface TruckAvailabilityState {
+  isBookedNow: boolean;
+  availableFrom?: string;
+}
+
+function dateOnlyToTimestamp(value: string) {
+  return new Date(`${value}T00:00:00`).getTime();
+}
+
+function getTruckAvailability(
+  truck: Truck,
+  bookingsByTruckId?: Map<string, Booking[]>
+): TruckAvailabilityState {
+  const today = new Date();
+  const todayDate = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  ).getTime();
+
+  const bookings = bookingsByTruckId?.get(truck.id) ?? [];
+
+  const activeBooking = bookings
+    .filter((booking) => {
+      const start = dateOnlyToTimestamp(booking.startDate);
+      const end = dateOnlyToTimestamp(booking.endDate);
+      return start <= todayDate && todayDate < end;
+    })
+    .sort((left, right) => left.endDate.localeCompare(right.endDate))[0];
+
+  if (activeBooking) {
+    return {
+      isBookedNow: true,
+      availableFrom: activeBooking.endDate,
+    };
+  }
+
+  return {
+    isBookedNow: false,
+  };
+}
+
+function toTruckCatalogItem(
+  truck: Truck,
+  availability?: TruckAvailabilityState
+): TruckCatalogItem {
   const [accentFrom, accentTo] = getPalette(truck.id || truck.name);
   const summary =
     truck.description.length > 96
       ? `${truck.description.slice(0, 93).trim()}...`
       : truck.description;
+  const isBookedNow = availability?.isBookedNow ?? false;
+  const availableFromDate = availability?.availableFrom;
+  const availabilityLabel =
+    isBookedNow && availableFromDate
+      ? `Có thể thuê từ ngày ${formatDate(availableFromDate)}`
+      : "Có thể nhận xe trong 24 giờ";
+  const availabilityTag =
+    isBookedNow && availableFromDate
+      ? `Bận đến hết ngày ${formatDate(availableFromDate)}`
+      : "Có thể thuê ngay";
 
   return {
     ...truck,
@@ -133,20 +199,19 @@ function toTruckCatalogItem(truck: Truck): TruckCatalogItem {
           ? "Xe giao vận trung"
           : "Xe giao vận nhỏ",
     summary,
-    gear: "Sẵn sàng khai thác",
-    fuel: truck.fuelType || "Máy dầu",
+    gear: isBookedNow ? "Đang được thuê" : "Sẵn sàng khai thác",
+    fuel: truck.fuelType || "--",
     tags: [
-      truck.isAvailable ? "Có sẵn" : "Tạm hết lịch",
+      availabilityTag,
       truck.location,
       `${truck.capacity.toLocaleString("vi-VN")} kg`,
       ...(truck.brand ? [truck.brand] : []),
       ...(truck.year ? [`${truck.year}`] : []),
     ],
+    availabilityTag,
     accentFrom,
     accentTo,
-    availableFrom: truck.isAvailable
-      ? "Có thể nhận xe trong 24 giờ"
-      : "Tạm thời đã kín lịch",
+    availableFrom: availabilityLabel,
   };
 }
 
@@ -179,15 +244,16 @@ async function uploadVehicleDocument(
     }`
   );
   const snapshot = await uploadBytes(storageRef, file);
+  const now = new Date().toISOString();
 
   return {
     id: uuidv4(),
     name: file.name,
     type: documentType,
     url: await getDownloadURL(snapshot.ref),
-    uploadedAt: new Date().toISOString(),
+    uploadedAt: now,
     approved,
-    approvedAt: approved ? new Date().toISOString() : undefined,
+    ...(approved ? { approvedAt: now } : {}),
   } satisfies VehicleDocument;
 }
 
@@ -222,6 +288,7 @@ function filterTrucks(trucks: TruckCatalogItem[], filters: TruckFilters = {}) {
 
   return [...trucks]
     .filter((truck) => {
+      const matchApproved = truck.documentsApproved === true;
       const matchLocation = normalizedLocation
         ? truck.location.toLowerCase().includes(normalizedLocation)
         : true;
@@ -233,7 +300,7 @@ function filterTrucks(trucks: TruckCatalogItem[], filters: TruckFilters = {}) {
         ? searchable.includes(normalizedKeyword)
         : true;
 
-      return matchLocation && matchPrice && matchKeyword;
+      return matchApproved && matchLocation && matchPrice && matchKeyword;
     })
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
@@ -253,6 +320,50 @@ async function uploadTruckImages(ownerId: string, images: File[]) {
   }
 
   return uploadedUrls;
+}
+
+async function getActiveBookingsByTruckIds(truckIds: string[]) {
+  if (truckIds.length === 0) {
+    return new Map<string, Booking[]>();
+  }
+
+  const uniqueTruckIds = Array.from(new Set(truckIds));
+  const groupedBookings = new Map<string, Booking[]>();
+  const chunks: string[][] = [];
+
+  for (let index = 0; index < uniqueTruckIds.length; index += 10) {
+    chunks.push(uniqueTruckIds.slice(index, index + 10));
+  }
+
+  try {
+    for (const chunk of chunks) {
+      const bookingsQuery = query(
+        collection(db!, COLLECTIONS.bookings),
+        where("truckId", "in", chunk)
+      );
+      const snapshot = await getDocs(bookingsQuery);
+
+      for (const item of snapshot.docs) {
+        const booking = {
+          id: item.id,
+          ...(item.data() as Omit<Booking, "id">),
+        };
+
+        if (booking.status !== "accepted" && booking.status !== "in_progress") {
+          continue;
+        }
+
+        const existing = groupedBookings.get(booking.truckId) ?? [];
+        existing.push(booking);
+        groupedBookings.set(booking.truckId, existing);
+      }
+    }
+  } catch (error) {
+    console.warn("[trucks] Bỏ qua lịch thuê khi không thể đọc bookings", error);
+    return new Map<string, Booking[]>();
+  }
+
+  return groupedBookings;
 }
 
 export async function getMarketplaceTrucks(filters: TruckFilters = {}) {
@@ -276,13 +387,21 @@ export async function getMarketplaceTrucks(filters: TruckFilters = {}) {
     console.debug("[trucks] firestore result", snapshot.size, "items");
 
     const trucks = snapshot.docs.map((item) =>
-      toTruckCatalogItem({
+      ({
         id: item.id,
         ...(item.data() as Omit<Truck, "id">),
       })
     );
 
-    return enrichOwnerTrust(filterTrucks(trucks, filters));
+    const activeBookingsByTruckId = await getActiveBookingsByTruckIds(
+      trucks.map((truck) => truck.id)
+    );
+
+    const trucksWithAvailability = trucks.map((truck) =>
+      toTruckCatalogItem(truck, getTruckAvailability(truck, activeBookingsByTruckId))
+    );
+
+    return enrichOwnerTrust(filterTrucks(trucksWithAvailability, filters));
   } catch (error) {
     console.error("[trucks] lỗi getMarketplaceTrucks", error);
     throw new Error("Lỗi khi truy vấn dữ liệu xe tải từ Firebase.");
@@ -310,10 +429,24 @@ export async function getTruckById(id: string) {
       toTruckCatalogItem({
         id: snapshot.id,
         ...(snapshot.data() as Omit<Truck, "id">),
-      }),
+      })
     ]);
 
-    return enrichedTruck ?? null;
+    if (!enrichedTruck) {
+      return null;
+    }
+
+    const activeBookingsByTruckId = await getActiveBookingsByTruckIds([
+      enrichedTruck.id,
+    ]);
+
+    return {
+      ...enrichedTruck,
+      ...toTruckCatalogItem(
+        enrichedTruck,
+        getTruckAvailability(enrichedTruck, activeBookingsByTruckId)
+      ),
+    };
   } catch {
     throw new Error("Lỗi khi truy vấn dữ liệu xe tải từ Firebase.");
   }
@@ -331,13 +464,22 @@ export async function getOwnerTrucks(ownerId: string) {
     );
     const snapshot = await getDocs(trucksQuery);
 
+    const trucks = snapshot.docs.map((item) => ({
+      id: item.id,
+      ...(item.data() as Omit<Truck, "id">),
+    }));
+
+    const activeBookingsByTruckId = await getActiveBookingsByTruckIds(
+      trucks.map((truck) => truck.id)
+    );
+
     return enrichOwnerTrust(
-      snapshot.docs
-        .map((item) =>
-          toTruckCatalogItem({
-            id: item.id,
-            ...(item.data() as Omit<Truck, "id">),
-          })
+      trucks
+        .map((truck) =>
+          toTruckCatalogItem(
+            truck,
+            getTruckAvailability(truck, activeBookingsByTruckId)
+          )
         )
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     );
@@ -391,39 +533,33 @@ export async function createTruck(input: CreateTruckInput) {
 
   const isAdmin = owner.role === "admin";
 
-  if (!isAdmin && (!input.vehicleRegistrationFile || !input.safetyInspectionFile)) {
-    throw new Error("Chủ xe cần tải đủ đăng ký xe và kiểm định an toàn kỹ thuật.");
+  if (input.images.length === 0) {
+    throw new Error("Cần ít nhất 1 hình ảnh để đăng xe.");
   }
 
   const imageUrls = await uploadTruckImages(input.ownerId, input.images);
   const primaryImageUrl = resolvePrimaryImageUrl(imageUrls, input.primaryImageIndex);
+  if (!primaryImageUrl) {
+    throw new Error("Cần chọn ảnh chính cho xe.");
+  }
   const truckDocRef = doc(collection(firebase.db, COLLECTIONS.trucks));
 
-  const vehicleDocuments: VehicleDocument[] = [];
-
-  if (input.vehicleRegistrationFile) {
-    vehicleDocuments.push(
-      await uploadVehicleDocument(
-        input.ownerId,
-        truckDocRef.id,
-        "vehicleRegistration",
-        input.vehicleRegistrationFile,
-        isAdmin
-      )
-    );
-  }
-
-  if (input.safetyInspectionFile) {
-    vehicleDocuments.push(
-      await uploadVehicleDocument(
-        input.ownerId,
-        truckDocRef.id,
-        "safetyInspection",
-        input.safetyInspectionFile,
-        isAdmin
-      )
-    );
-  }
+  const vehicleDocuments: VehicleDocument[] = [
+    await uploadVehicleDocument(
+      input.ownerId,
+      truckDocRef.id,
+      "vehicleRegistration",
+      input.vehicleRegistrationFile,
+      isAdmin
+    ),
+    await uploadVehicleDocument(
+      input.ownerId,
+      truckDocRef.id,
+      "safetyInspection",
+      input.safetyInspectionFile,
+      isAdmin
+    ),
+  ];
 
   const cargoVolume =
     input.dimensions.length * input.dimensions.width * input.dimensions.height;
@@ -445,6 +581,14 @@ export async function createTruck(input: CreateTruckInput) {
     primaryImageUrl,
     vehicleDocuments,
     documentsApproved: isAdmin,
+    documentsReviewStatus: isAdmin ? "approved" : "pending",
+    documentsReviewNote: "",
+    ...(isAdmin
+      ? {
+          documentsReviewedAt: new Date().toISOString(),
+          documentsReviewedBy: owner.id,
+        }
+      : {}),
     description: input.description,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -493,6 +637,9 @@ export async function updateTruck(input: UpdateTruckInput) {
   const isAdmin = requester.role === "admin";
   const uploadedNewImages = await uploadTruckImages(ownerId, input.newImages);
   const mergedImages = [...input.existingImageUrls, ...uploadedNewImages];
+  const hasNewVehicleDocuments = Boolean(
+    input.vehicleRegistrationFile || input.safetyInspectionFile
+  );
 
   const baseVehicleDocuments = currentTruck.vehicleDocuments ?? [];
   const nextVehicleDocuments = [...baseVehicleDocuments];
@@ -553,7 +700,32 @@ export async function updateTruck(input: UpdateTruckInput) {
     images: mergedImages,
     primaryImageUrl: resolvePrimaryImageUrl(mergedImages, input.primaryImageIndex),
     vehicleDocuments: nextVehicleDocuments,
-    documentsApproved: isAdmin ? true : currentTruck.documentsApproved ?? false,
+    documentsApproved: isAdmin
+      ? true
+      : hasNewVehicleDocuments
+        ? false
+        : currentTruck.documentsApproved ?? false,
+    documentsReviewStatus: isAdmin
+      ? "approved"
+      : hasNewVehicleDocuments
+        ? "pending"
+        : currentTruck.documentsReviewStatus ?? "pending",
+    documentsReviewNote: isAdmin
+      ? ""
+      : hasNewVehicleDocuments
+        ? ""
+        : currentTruck.documentsReviewNote ?? "",
+    ...(isAdmin
+      ? {
+          documentsReviewedAt: new Date().toISOString(),
+          documentsReviewedBy: requester.id,
+        }
+      : currentTruck.documentsReviewedAt && currentTruck.documentsReviewedBy
+        ? {
+            documentsReviewedAt: currentTruck.documentsReviewedAt,
+            documentsReviewedBy: currentTruck.documentsReviewedBy,
+          }
+        : {}),
     description: input.description,
     updatedAt: new Date().toISOString(),
   };
@@ -570,4 +742,107 @@ export async function updateTruck(input: UpdateTruckInput) {
   ]);
 
   return truck;
+}
+
+export async function getTrucksPendingDocumentReview() {
+  if (!canUseFirebaseRead()) {
+    throw new Error("Firebase chưa được cấu hình để đọc dữ liệu xe tải.");
+  }
+
+  try {
+    const trucksQuery = query(
+      collection(db!, COLLECTIONS.trucks),
+      where("documentsApproved", "==", false)
+    );
+    const snapshot = await getDocs(trucksQuery);
+
+    const trucks = snapshot.docs
+      .map((item) =>
+        toTruckCatalogItem({
+          id: item.id,
+          ...(item.data() as Omit<Truck, "id">),
+        })
+      )
+      .filter((truck) => (truck.vehicleDocuments ?? []).length > 0)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+    return enrichOwnerTrust(trucks);
+  } catch {
+    throw new Error("Không thể tải danh sách xe đang chờ duyệt giấy tờ.");
+  }
+}
+
+export async function reviewTruckDocuments({
+  truckId,
+  actorId,
+  decision,
+  note,
+}: ReviewTruckDocumentsInput) {
+  const firebase = ensureFirebaseConfigured();
+  const [actor, truckSnapshot] = await Promise.all([
+    getUserProfileById(actorId),
+    getDoc(doc(firebase.db, COLLECTIONS.trucks, truckId)),
+  ]);
+
+  if (!actor || actor.role !== "admin") {
+    throw new Error("Chỉ quản trị viên mới có quyền duyệt giấy tờ xe.");
+  }
+
+  if (!truckSnapshot.exists()) {
+    throw new Error("Không tìm thấy xe cần duyệt giấy tờ.");
+  }
+
+  const currentTruck = {
+    id: truckSnapshot.id,
+    ...(truckSnapshot.data() as Omit<Truck, "id">),
+  };
+
+  const vehicleDocuments = currentTruck.vehicleDocuments ?? [];
+  if (vehicleDocuments.length === 0) {
+    throw new Error("Xe này chưa có giấy tờ để duyệt.");
+  }
+
+  const now = new Date().toISOString();
+  const nextDocuments = vehicleDocuments.map((document) => {
+    if (decision === "approved") {
+      return {
+        ...document,
+        approved: true,
+        approvedAt: now,
+      };
+    }
+
+    return {
+      id: document.id,
+      name: document.name,
+      type: document.type,
+      url: document.url,
+      uploadedAt: document.uploadedAt,
+      approved: false,
+    } satisfies VehicleDocument;
+  });
+
+  const payload: Partial<Truck> = {
+    vehicleDocuments: nextDocuments,
+    documentsApproved: decision === "approved",
+    documentsReviewStatus: decision === "approved" ? "approved" : "needsMore",
+    documentsReviewNote: note?.trim() ?? "",
+    documentsReviewedAt: now,
+    documentsReviewedBy: actor.id,
+    updatedAt: now,
+  };
+
+  await setDoc(doc(firebase.db, COLLECTIONS.trucks, truckId), payload, {
+    merge: true,
+  });
+
+  const [reviewedTruck] = await enrichOwnerTrust([
+    toTruckCatalogItem({
+      ...currentTruck,
+      ...payload,
+      id: currentTruck.id,
+    }),
+  ]);
+
+  return reviewedTruck;
 }

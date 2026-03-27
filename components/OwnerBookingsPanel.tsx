@@ -10,7 +10,7 @@ import {
 } from "@/lib/services/bookings";
 import { getPublicUserProfilesByIds } from "@/lib/services/users";
 import { formatDateRange } from "@/lib/utils/format";
-import { getBookingStatusLabel } from "@/lib/utils/labels";
+import { getBookingStatusLabel, getPaymentStatusLabel } from "@/lib/utils/labels";
 import type { Booking } from "@/types";
 
 interface OwnerBookingViewModel extends Booking {
@@ -115,6 +115,9 @@ export function OwnerBookingsPanel() {
                   <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-500">
                     {getBookingStatusLabel(booking.status)}
                   </p>
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                    {getPaymentStatusLabel(booking.paymentStatus ?? "unpaid")}
+                  </p>
                   <h3 className="mt-2 text-xl font-semibold text-stone-950">
                     Đơn thuê cho {booking.renterName}
                   </h3>
@@ -124,27 +127,37 @@ export function OwnerBookingsPanel() {
                   <p className="mt-1 text-sm text-stone-600">
                     {formatDateRange(booking.startDate, booking.endDate)}
                   </p>
+                  <p className="mt-1 text-sm text-stone-600">
+                    Điểm giao xe: {booking.deliveryAddress}
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {booking.status === "pending" ? (
+                  {booking.status === "pending" &&
+                  (booking.paymentStatus ?? "unpaid") === "paid" ? (
                     <button
                       type="button"
                       disabled={isPending}
-                      onClick={() => handleStatusUpdate(booking.id, "confirmed")}
+                      onClick={() => handleStatusUpdate(booking.id, "accepted")}
                       className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-70"
                     >
-                      Xác nhận
+                      Nhận đơn
                     </button>
                   ) : null}
-                  {booking.status === "confirmed" ? (
+                  {booking.status === "pending" &&
+                  (booking.paymentStatus ?? "unpaid") !== "paid" ? (
+                    <p className="rounded-full border border-stone-200 bg-stone-100 px-4 py-2 text-sm font-medium text-stone-600">
+                      Chờ khách thanh toán
+                    </p>
+                  ) : null}
+                  {booking.status === "in_progress" ? (
                     <button
                       type="button"
                       disabled={isPending}
                       onClick={() => handleStatusUpdate(booking.id, "completed")}
                       className="rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-70"
                     >
-                      Hoàn tất
+                      Hoàn tất đơn hàng
                     </button>
                   ) : null}
                 </div>

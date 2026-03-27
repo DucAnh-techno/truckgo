@@ -64,6 +64,15 @@ export function TruckCard({ truck }: TruckCardProps) {
 
         {/* Label Boxes */}
         <div className="flex flex-wrap gap-2">
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+              truck.gear === "Đang được thuê"
+                ? "bg-amber-100 text-amber-800"
+                : "bg-emerald-100 text-emerald-800"
+            }`}
+          >
+            {truck.availabilityTag}
+          </span>
           <span className="rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-stone-600">
             {truck.location}
           </span>

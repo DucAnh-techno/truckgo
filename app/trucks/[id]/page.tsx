@@ -5,6 +5,7 @@ import { DeleteTruckButton } from "@/components/DeleteTruckButton";
 import { EditTruckButton } from "../../../components/EditTruckButton";
 import { ReportButton } from "@/components/ReportButton";
 import { ReviewList } from "@/components/ReviewList";
+import { TruckDocumentReviewForm } from "@/components/TruckDocumentReviewForm";
 import { TrustSummary } from "@/components/TrustSummary";
 import { TruckImageGallery } from "@/components/TruckImageGallery";
 import { TruckOwnerRedirectGate } from "@/components/TruckOwnerRedirectGate";
@@ -24,10 +25,24 @@ import type { PublicUserProfile, Review } from "@/types";
 
 interface TruckDetailPageProps {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ review?: string | string[] }>;
 }
 
-export default async function TruckDetailPage({ params }: TruckDetailPageProps) {
+function readSearchValue(value?: string | string[]) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return Array.isArray(value) ? value[0] : undefined;
+}
+
+export default async function TruckDetailPage({
+  params,
+  searchParams,
+}: TruckDetailPageProps) {
   const { id } = await params;
+  const query = searchParams ? await searchParams : undefined;
+  const reviewMode = readSearchValue(query?.review) === "documents";
 
   let truck: TruckCatalogItem | null = null;
   let owner: PublicUserProfile | null = null;
@@ -148,6 +163,15 @@ export default async function TruckDetailPage({ params }: TruckDetailPageProps) 
               <p className="text-sm font-semibold text-stone-700">Mô tả</p>
               <p className="mt-2 text-sm text-stone-600">{truck.description}</p>
             </div>
+
+            <TruckDocumentReviewForm
+              truckId={truck.id}
+              enabled={reviewMode}
+              vehicleDocuments={truck.vehicleDocuments ?? []}
+              documentsReviewStatus={truck.documentsReviewStatus}
+              documentsReviewNote={truck.documentsReviewNote}
+              documentsApproved={truck.documentsApproved}
+            />
           </div>
         </div>
 

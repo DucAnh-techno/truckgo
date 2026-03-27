@@ -1,10 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 
 import { VerifiedBadge } from "@/components/VerifiedBadge";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { getAllReports, updateReportStatus } from "@/lib/services/reports";
+import {
+  getTrucksPendingDocumentReview,
+  type TruckCatalogItem,
+} from "@/lib/services/trucks";
 import {
   getUsersPendingVerification,
   updateUserVerificationStatus,
@@ -13,12 +18,14 @@ import {
   getReportStatusLabel,
   getReportTargetLabel,
   getRoleLabel,
+  getTruckDocumentReviewStatusLabel,
   getVerificationDocumentTypeLabel,
 } from "@/lib/utils/labels";
 import type { Report, User } from "@/types";
 
 export function AdminModerationPanel() {
   const { profile } = useAuth();
+  const [pendingTruckReviews, setPendingTruckReviews] = useState<TruckCatalogItem[]>([]);
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [verificationNotes, setVerificationNotes] = useState<Record<string, string>>(
@@ -29,10 +36,12 @@ export function AdminModerationPanel() {
   const [isPending, startTransition] = useTransition();
 
   async function loadModerationData() {
-    const [nextPendingUsers, nextReports] = await Promise.all([
+    const [nextPendingTruckReviews, nextPendingUsers, nextReports] = await Promise.all([
+      getTrucksPendingDocumentReview(),
       getUsersPendingVerification(),
       getAllReports(),
     ]);
+    setPendingTruckReviews(nextPendingTruckReviews);
     setPendingUsers(nextPendingUsers);
     setReports(nextReports);
   }
@@ -42,6 +51,7 @@ export function AdminModerationPanel() {
 
     async function run() {
       if (!profile || profile.role !== "admin") {
+        setPendingTruckReviews([]);
         setPendingUsers([]);
         setReports([]);
         return;
@@ -132,11 +142,47 @@ export function AdminModerationPanel() {
             </h2>
           </div>
           <span className="rounded-full bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700">
-            {pendingUsers.length} hồ sơ
+            {pendingTruckReviews.length + pendingUsers.length} hồ sơ
           </span>
         </div>
 
         <div className="mt-6 space-y-4">
+          {pendingTruckReviews.length > 0 ? (
+            pendingTruckReviews.map((truck) => (
+              <article
+                key={truck.id}
+                className="rounded-[26px] border border-orange-200 bg-orange-50/60 p-5"
+              >
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-600">
+                      Hồ sơ xe chờ duyệt
+                    </p>
+                    <h3 className="mt-2 text-xl font-semibold text-stone-950">
+                      {truck.name}
+                    </h3>
+                    <p className="mt-1 text-sm text-stone-600">
+                      Chủ xe: {truck.ownerName ?? truck.ownerId}
+                    </p>
+                    <p className="mt-1 text-sm text-stone-600">
+                      Đã gửi {(truck.vehicleDocuments ?? []).length} giấy tờ
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-stone-700">
+                      Trạng thái: {getTruckDocumentReviewStatusLabel(truck.documentsReviewStatus)}
+                    </p>
+                  </div>
+
+                  <Link
+                    href={`/trucks/${truck.id}?review=documents`}
+                    className="inline-flex rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600"
+                  >
+                    Mở đơn
+                  </Link>
+                </div>
+              </article>
+            ))
+          ) : null}
+
           {pendingUsers.length > 0 ? (
             pendingUsers.map((user) => (
               <article
@@ -216,11 +262,11 @@ export function AdminModerationPanel() {
                 </div>
               </article>
             ))
-          ) : (
+          ) : pendingTruckReviews.length === 0 ? (
             <div className="rounded-[26px] border border-dashed border-stone-300 bg-stone-50 p-8 text-center text-stone-600">
               Hiện không có hồ sơ xác thực nào đang chờ duyệt.
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 

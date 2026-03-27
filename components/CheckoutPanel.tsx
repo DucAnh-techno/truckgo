@@ -42,7 +42,9 @@ export function CheckoutPanel({ booking }: CheckoutPanelProps) {
         }
 
         await markBookingPaid(booking.id, profile.id);
-        setSuccessMessage("Đã ghi nhận thanh toán thành công. Đang chuyển đến trang đơn thuê...");
+        setSuccessMessage(
+          "Đã ghi nhận thanh toán thành công. Chủ xe sẽ thấy nút Nhận đơn, sau đó bạn có thể xác nhận Đã nhận xe."
+        );
 
         setTimeout(() => {
           router.push(`/bookings?payment=success&bookingId=${booking.id}`);

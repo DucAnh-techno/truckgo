@@ -1,8 +1,10 @@
 export type UserRole = "admin" | "owner" | "renter";
 
 export type BookingStatus =
-  | "pending"
   | "confirmed"
+  | "pending"
+  | "accepted"
+  | "in_progress"
   | "cancelled"
   | "completed";
 
@@ -105,6 +107,10 @@ export interface Truck extends TimestampFields {
   primaryImageUrl?: string;
   vehicleDocuments?: VehicleDocument[];
   documentsApproved?: boolean;
+  documentsReviewStatus?: "pending" | "needsMore" | "approved";
+  documentsReviewNote?: string;
+  documentsReviewedAt?: string;
+  documentsReviewedBy?: string;
   description: string;
   isAvailable: boolean;
   rentalCount?: number;
@@ -117,11 +123,17 @@ export interface Booking extends TimestampFields {
   ownerId: string;
   startDate: string;
   endDate: string;
+  deliveryAddress: string;
+  deliveryLat: number;
+  deliveryLng: number;
   totalPrice: number;
   loadingService?: boolean;
   loadingServiceFee?: number;
   status: BookingStatus;
   paymentStatus?: BookingPaymentStatus;
+  acceptedAt?: string;
+  receivedAt?: string;
+  completedAt?: string;
   paidAt?: string;
   paymentMethod?: string;
   paymentNote?: string;

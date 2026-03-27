@@ -129,7 +129,7 @@ export default async function HomePage() {
           </div>
           <Link
             href="/trucks"
-            className="text-sm font-semibold text-stone-700 transition hover:text-orange-600"
+            className="rounded-full bg-white px-5 py-3.5 font-semibold text-stone-950 transition hover:bg-orange-600 hover:text-white inline-block"
           >
             Xem toàn bộ danh sách
           </Link>

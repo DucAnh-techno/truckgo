@@ -1,10 +1,14 @@
 import {
+  EmailAuthProvider,
   createUserWithEmailAndPassword,
+  reauthenticateWithCredential,
   sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
+  updatePassword,
   updateProfile,
 } from "firebase/auth";
+import { FirebaseError } from "firebase/app";
 import { doc, setDoc } from "firebase/firestore";
 
 import { COLLECTIONS, type User, type UserRole } from "@/types";
@@ -25,6 +29,11 @@ export interface RegisterInput {
 export interface LoginInput {
   email: string;
   password: string;
+}
+
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
 }
 
 export async function getCurrentUser() {
@@ -155,4 +164,38 @@ export async function logoutUser() {
   }
 
   await signOut(auth);
+}
+
+export async function changeUserPassword({
+  currentPassword,
+  newPassword,
+}: ChangePasswordInput) {
+  const firebase = ensureFirebaseConfigured();
+  const user = firebase.auth.currentUser;
+
+  if (!user || !user.email) {
+    throw new Error("Bạn cần đăng nhập để đổi mật khẩu.");
+  }
+
+  try {
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    await updatePassword(user, newPassword);
+  } catch (error) {
+    if (error instanceof FirebaseError) {
+      if (error.code === "auth/wrong-password" || error.code === "auth/invalid-credential") {
+        throw new Error("Mật khẩu hiện tại không đúng.");
+      }
+
+      if (error.code === "auth/weak-password") {
+        throw new Error("Mật khẩu mới quá yếu. Hãy dùng ít nhất 8 ký tự.");
+      }
+
+      if (error.code === "auth/too-many-requests") {
+        throw new Error("Bạn thao tác quá nhiều lần. Vui lòng thử lại sau ít phút.");
+      }
+    }
+
+    throw new Error("Không thể đổi mật khẩu lúc này. Vui lòng thử lại.");
+  }
 }

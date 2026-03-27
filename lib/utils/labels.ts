@@ -25,8 +25,10 @@ export function getBookingStatusLabel(status: BookingStatus | string) {
   switch (status) {
     case "pending":
       return "Chờ xác nhận";
-    case "confirmed":
-      return "Đã xác nhận";
+    case "accepted":
+      return "Chủ xe đã nhận đơn";
+    case "in_progress":
+      return "Đang thuê";
     case "cancelled":
       return "Đã hủy";
     case "completed":
@@ -98,4 +100,16 @@ export function getReportStatusLabel(status: ReportStatus) {
 
 export function getReportTargetLabel(targetType: ReportTargetType) {
   return targetType === "truck" ? "Báo cáo phương tiện" : "Báo cáo người dùng";
+}
+
+export function getTruckDocumentReviewStatusLabel(status?: string) {
+  switch (status) {
+    case "approved":
+      return "Đã duyệt";
+    case "needsMore":
+      return "Cần bổ sung";
+    case "pending":
+    default:
+      return "Chờ duyệt";
+  }
 }
