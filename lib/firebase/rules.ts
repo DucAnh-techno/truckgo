@@ -80,13 +80,16 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.pricePerDay > 0
         && request.resource.data.capacity > 0;
-      allow update, delete: if isAdmin() || (
+      allow update: if isAdmin() || (
         isSignedIn()
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
         && request.resource.data.documentsApproved == resource.data.documentsApproved
         && request.resource.data.documentsReviewedAt == resource.data.documentsReviewedAt
         && request.resource.data.documentsReviewedBy == resource.data.documentsReviewedBy
+      );
+      allow delete: if isAdmin() || (
+        isSignedIn() && resource.data.ownerId == request.auth.uid
       );
     }
 
@@ -100,7 +103,6 @@ service cloud.firestore {
 
       allow create: if isSignedIn()
         && request.resource.data.renterId == request.auth.uid
-        && currentUser().role in ["owner", "renter", "admin"]
         && request.resource.data.status == "pending"
         && request.resource.data.paymentStatus == "unpaid"
         && request.resource.data.deliveryAddress is string

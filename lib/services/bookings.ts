@@ -8,6 +8,7 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
+import { FirebaseError } from "firebase/app";
 
 import { COLLECTIONS, type Booking } from "@/types";
 import { db, ensureFirebaseConfigured, isFirebaseConfigured } from "@/lib/firebase/config";
@@ -126,9 +127,20 @@ async function getBlockingBookingsForTruck(
   truckId: string,
   excludedBookingId?: string
 ) {
-  const snapshot = await getDocs(
-    query(collection(db!, COLLECTIONS.bookings), where("truckId", "==", truckId))
-  );
+  let snapshot;
+
+  try {
+    snapshot = await getDocs(
+      query(collection(db!, COLLECTIONS.bookings), where("truckId", "==", truckId))
+    );
+  } catch (error) {
+    // Booking read rules are participant-based; if not allowed, skip conflict check.
+    if (error instanceof FirebaseError && error.code === "permission-denied") {
+      return [];
+    }
+
+    throw error;
+  }
 
   return snapshot.docs
     .map((item) =>
@@ -288,9 +300,19 @@ export async function getBookedDateRangesByTruckId(
       .sort((left, right) => left.startDate.localeCompare(right.startDate));
   }
 
-  const snapshot = await getDocs(
-    query(collection(db!, COLLECTIONS.bookings), where("truckId", "==", truckId))
-  );
+  let snapshot;
+
+  try {
+    snapshot = await getDocs(
+      query(collection(db!, COLLECTIONS.bookings), where("truckId", "==", truckId))
+    );
+  } catch (error) {
+    if (error instanceof FirebaseError && error.code === "permission-denied") {
+      return [];
+    }
+
+    throw error;
+  }
 
   return snapshot.docs
     .map((item) =>
@@ -314,8 +336,18 @@ export async function getBookedDateRangesByTruckId(
 
 export async function createBooking(input: CreateBookingInput) {
   const firebase = ensureFirebaseConfigured();
+  const renterId = firebase.auth.currentUser?.uid;
+
+  if (!renterId) {
+    throw new Error("Bạn cần đăng nhập để tạo booking.");
+  }
+
+  if (input.renterId !== renterId) {
+    throw new Error("Phiên đăng nhập không khớp thông tin người đặt xe.");
+  }
+
   const truck = await getTruckById(input.truckId);
-  const renter = await getUserProfileById(input.renterId);
+  const renter = await getUserProfileById(renterId);
 
   if (!truck) {
     throw new Error("Không tìm thấy xe để đặt.");
@@ -340,12 +372,16 @@ export async function createBooking(input: CreateBookingInput) {
     throw new Error("Ngày bắt đầu và ngày kết thúc không hợp lệ.");
   }
 
-  if (truck.ownerId === input.renterId) {
+  if (truck.ownerId === renterId) {
     throw new Error("Bạn không thể tự đặt chính xe do mình đăng.");
   }
 
   if (!truck.isAvailable) {
     throw new Error("Xe này hiện tạm thời không khả dụng để đặt.");
+  }
+
+  if (!Number.isFinite(truck.pricePerDay) || truck.pricePerDay <= 0) {
+    throw new Error("Xe này chưa có mức giá hợp lệ để tạo booking.");
   }
 
   const deliveryAddress = input.deliveryAddress.trim();
@@ -376,7 +412,7 @@ export async function createBooking(input: CreateBookingInput) {
 
   const payload: Omit<Booking, "id"> = {
     truckId: truck.id,
-    renterId: input.renterId,
+    renterId,
     ownerId: truck.ownerId,
     startDate: input.startDate,
     endDate: input.endDate,

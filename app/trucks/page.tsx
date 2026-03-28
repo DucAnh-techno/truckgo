@@ -8,6 +8,8 @@ import {
   type TruckCatalogItem,
 } from "@/lib/services/trucks";
 
+export const dynamic = "force-dynamic";
+
 interface TrucksPageProps {
   searchParams: Promise<{
     location?: string | string[];

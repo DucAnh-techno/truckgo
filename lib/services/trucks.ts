@@ -2,7 +2,6 @@ import { v4 as uuidv4 } from "uuid";
 import { FirebaseError } from "firebase/app";
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -17,6 +16,7 @@ import { COLLECTIONS, type Booking, type Truck, type VehicleDocument } from "@/t
 import {
   db,
   ensureFirebaseConfigured,
+  auth,
   isFirebaseConfigured,
 } from "@/lib/firebase/config";
 import { getReviewSummariesForUsers } from "@/lib/services/reviews";
@@ -341,6 +341,12 @@ async function getActiveBookingsByTruckIds(truckIds: string[]) {
     return new Map<string, Booking[]>();
   }
 
+  // Booking documents are protected by participant-based rules,
+  // so skip this query for anonymous/public browsing contexts.
+  if (!auth?.currentUser) {
+    return new Map<string, Booking[]>();
+  }
+
   const uniqueTruckIds = Array.from(new Set(truckIds));
   const groupedBookings = new Map<string, Booking[]>();
   const chunks: string[][] = [];
@@ -373,6 +379,10 @@ async function getActiveBookingsByTruckIds(truckIds: string[]) {
       }
     }
   } catch (error) {
+    if (error instanceof FirebaseError && error.code === "permission-denied") {
+      return new Map<string, Booking[]>();
+    }
+
     console.warn("[trucks] Bỏ qua lịch thuê khi không thể đọc bookings", error);
     return new Map<string, Booking[]>();
   }
@@ -422,8 +432,8 @@ export async function getMarketplaceTrucks(filters: TruckFilters = {}) {
   }
 }
 
-export async function getFeaturedTrucks() {
-  const trucks = await getMarketplaceTrucks();
+export async function getFeaturedTrucks(sourceTrucks?: TruckCatalogItem[]) {
+  const trucks = sourceTrucks ?? await getMarketplaceTrucks();
   return trucks.slice(0, 4);
 }
 
@@ -478,10 +488,12 @@ export async function getOwnerTrucks(ownerId: string) {
     );
     const snapshot = await getDocs(trucksQuery);
 
-    const trucks = snapshot.docs.map((item) => ({
-      id: item.id,
-      ...(item.data() as Omit<Truck, "id">),
-    }));
+    const trucks = snapshot.docs
+      .map((item) => ({
+        id: item.id,
+        ...(item.data() as Omit<Truck, "id">),
+      }))
+      .filter((truck) => truck.isAvailable !== false);
 
     const activeBookingsByTruckId = await getActiveBookingsByTruckIds(
       trucks.map((truck) => truck.id)
@@ -502,8 +514,8 @@ export async function getOwnerTrucks(ownerId: string) {
   }
 }
 
-export async function getPopularLocations() {
-  const trucks = await getMarketplaceTrucks();
+export async function getPopularLocations(sourceTrucks?: TruckCatalogItem[]) {
+  const trucks = sourceTrucks ?? await getMarketplaceTrucks();
   return Array.from(new Set(trucks.map((truck) => truck.location)));
 }
 
@@ -528,7 +540,28 @@ export async function deleteTruck(truckId: string, requesterId: string) {
     throw new Error("Bạn không có quyền xóa xe này.");
   }
 
-  await deleteDoc(truckDocRef);
+  if (truck.isAvailable === false) {
+    return true;
+  }
+
+  try {
+    await setDoc(
+      truckDocRef,
+      {
+        isAvailable: false,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    if (error instanceof FirebaseError && error.code === "permission-denied") {
+      throw new Error(
+        "Missing or insufficient permissions. Tài khoản hiện tại chưa có quyền cập nhật xe này theo Firestore Rules."
+      );
+    }
+
+    throw error;
+  }
 
   return true;
 }

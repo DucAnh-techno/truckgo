@@ -8,11 +8,13 @@ import {
 } from "@/lib/services/trucks";
 import { formatCurrency } from "@/lib/utils/format";
 
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
-  const [featuredTrucks, locations, allTrucks] = await Promise.all([
-    getFeaturedTrucks(),
-    getPopularLocations(),
-    getMarketplaceTrucks(),
+  const allTrucks = await getMarketplaceTrucks();
+  const [featuredTrucks, locations] = await Promise.all([
+    getFeaturedTrucks(allTrucks),
+    getPopularLocations(allTrucks),
   ]);
   const startingPrice = allTrucks.length
     ? Math.min(...allTrucks.map((truck) => truck.pricePerDay))
