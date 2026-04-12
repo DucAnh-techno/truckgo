@@ -27,51 +27,7 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"],
-  
-  "app": {
-    "auth": {
-      "page": "auth/page.tsx"
-    },
-    "trucks": {
-      "page": "trucks/page.tsx",
-      "id": {
-        "page": "trucks/[id]/page.tsx"
-      },
-      "create": {
-        "page": "trucks/create/page.tsx"
-      }
-    },
-    "bookings": {
-      "page": "bookings/page.tsx"
-    },
-    "layout": {
-      "page": "layout.tsx"
-    },
-    "page": "page.tsx"
-  },
-  "lib": {
-    "firebase": {
-      "ts": "firebase.ts"
-    },
-    "services": {
-      "auth": {
-        "ts": "services/auth.ts"
-      },
-      "trucks": {
-        "ts": "services/trucks.ts"
-      },
-      "bookings": {
-        "ts": "services/bookings.ts"
-      }
-    }
-  },
-  "components": {
-    "Navigation": {
-      "tsx": "Navigation.tsx"
-    }
-  }
+  "exclude": ["node_modules"]
 }

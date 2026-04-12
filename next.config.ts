@@ -8,6 +8,9 @@ const nextConfig: NextConfig = {
         hostname: "firebasestorage.googleapis.com",
       },
     ],
+    domains: [     
+      "via.placeholder.com",
+      "www.hyundaisg.vn"],
   },
 };
 
