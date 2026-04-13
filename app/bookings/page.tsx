@@ -90,7 +90,7 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
           truckName: truckNameMap.get(booking.truckId) ?? booking.truckId,
           ownerId: booking.ownerId,
           ownerName:
-            ownerProfiles.get(booking.ownerId)?.name ?? booking.ownerId,
+            ownerProfiles.get(booking.ownerId)?.name || "Chủ xe (Chưa có tên)",
           startDate: booking.startDate,
           endDate: booking.endDate,
           deliveryAddress: booking.deliveryAddress,
@@ -105,6 +105,7 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
         new Map(existingReviews.map((review) => [review.bookingId, review]))
       );
     } catch (error) {
+      console.error(error);
       setErrorMessage(
         error instanceof Error ? error.message : "Không thể tải bookings."
       );
@@ -252,7 +253,7 @@ export default function BookingsPage({ searchParams }: BookingsPageProps) {
 
         {paymentStatusQuery === "success" ? (
           <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-            Đã ghi nhận thanh toán thành công{paidBookingId ? ` cho booking #${paidBookingId}` : ""}. Chờ chủ xe nhấn Nhận đơn, sau đó bạn có thể xác nhận Đã nhận xe.
+            Đã ghi nhận thanh toán thành công. Chờ chủ xe nhấn Nhận đơn, sau đó bạn có thể xác nhận Đã nhận xe.
           </div>
         ) : null}
 

@@ -236,35 +236,27 @@ async function uploadVehicleDocument(
   file: File,
   approved: boolean
 ) {
-  const firebase = ensureFirebaseConfigured();
-  const extension = file.name.split(".").pop();
-  const storageRef = ref(
-    firebase.storage,
-    `truck-docs/${ownerId}/${truckId}/${documentType}-${uuidv4()}${
-      extension ? `.${extension}` : ""
-    }`
-  );
-  let snapshot;
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("path", `truck-docs/${ownerId}/${truckId}`);
 
-  try {
-    snapshot = await uploadBytes(storageRef, file);
-  } catch (error) {
-    if (error instanceof FirebaseError && error.code === "storage/unauthorized") {
-      throw new Error(
-        "Khong co quyen tai giay to xe len Firebase Storage. Hay cap nhat Storage Rules cho duong dan truck-docs/{uid}/... va dam bao ban dang dang nhap dung tai khoan chu xe."
-      );
-    }
+  const res = await fetch("/api/upload", {
+    method: "POST",
+    body: formData,
+  });
 
-    throw error;
+  if (!res.ok) {
+    throw new Error(`Upload giấy tờ thất bại: ${res.statusText}`);
   }
 
+  const data = await res.json();
   const now = new Date().toISOString();
 
   return {
     id: uuidv4(),
     name: file.name,
     type: documentType,
-    url: await getDownloadURL(snapshot.ref),
+    url: data.url,
     uploadedAt: now,
     approved,
     ...(approved ? { approvedAt: now } : {}),
@@ -320,17 +312,24 @@ function filterTrucks(trucks: TruckCatalogItem[], filters: TruckFilters = {}) {
 }
 
 async function uploadTruckImages(ownerId: string, images: File[]) {
-  const firebase = ensureFirebaseConfigured();
   const uploadedUrls: string[] = [];
 
   for (const image of images) {
-    const extension = image.name.split(".").pop();
-    const storageRef = ref(
-      firebase.storage,
-      `trucks/${ownerId}/${uuidv4()}${extension ? `.${extension}` : ""}`
-    );
-    const snapshot = await uploadBytes(storageRef, image);
-    uploadedUrls.push(await getDownloadURL(snapshot.ref));
+    const formData = new FormData();
+    formData.append("file", image);
+    formData.append("path", `trucks/${ownerId}`);
+
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      throw new Error(`Upload ảnh thất bại: ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    uploadedUrls.push(data.url);
   }
 
   return uploadedUrls;
@@ -567,6 +566,7 @@ export async function deleteTruck(truckId: string, requesterId: string) {
 }
 
 export async function createTruck(input: CreateTruckInput) {
+  console.log("[createTruck] Bắt đầu tạo xe...");
   const firebase = ensureFirebaseConfigured();
   const owner = await getUserProfileById(input.ownerId);
 
@@ -584,13 +584,17 @@ export async function createTruck(input: CreateTruckInput) {
     throw new Error("Cần ít nhất 1 hình ảnh để đăng xe.");
   }
 
+  console.log("[createTruck] Đang upload ảnh xe...");
   const imageUrls = await uploadTruckImages(input.ownerId, input.images);
+  console.log("[createTruck] Upload ảnh xong.");
+  
   const primaryImageUrl = resolvePrimaryImageUrl(imageUrls, input.primaryImageIndex);
   if (!primaryImageUrl) {
     throw new Error("Cần chọn ảnh chính cho xe.");
   }
   const truckDocRef = doc(collection(firebase.db, COLLECTIONS.trucks));
 
+  console.log("[createTruck] Đang upload giấy tờ...");
   const vehicleDocuments: VehicleDocument[] = [
     await uploadVehicleDocument(
       input.ownerId,
@@ -607,6 +611,7 @@ export async function createTruck(input: CreateTruckInput) {
       isAdmin
     ),
   ];
+  console.log("[createTruck] Upload giấy tờ xong.");
 
   const cargoVolume =
     input.dimensions.length * input.dimensions.width * input.dimensions.height;
@@ -627,15 +632,11 @@ export async function createTruck(input: CreateTruckInput) {
     images: imageUrls,
     primaryImageUrl,
     vehicleDocuments,
-    documentsApproved: isAdmin,
-    documentsReviewStatus: isAdmin ? "approved" : "pending",
+    documentsApproved: true,
+    documentsReviewStatus: "approved",
     documentsReviewNote: "",
-    ...(isAdmin
-      ? {
-          documentsReviewedAt: new Date().toISOString(),
-          documentsReviewedBy: owner.id,
-        }
-      : {}),
+    documentsReviewedAt: new Date().toISOString(),
+    documentsReviewedBy: owner.id,
     description: input.description,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -747,32 +748,11 @@ export async function updateTruck(input: UpdateTruckInput) {
     images: mergedImages,
     primaryImageUrl: resolvePrimaryImageUrl(mergedImages, input.primaryImageIndex),
     vehicleDocuments: nextVehicleDocuments,
-    documentsApproved: isAdmin
-      ? true
-      : hasNewVehicleDocuments
-        ? false
-        : currentTruck.documentsApproved ?? false,
-    documentsReviewStatus: isAdmin
-      ? "approved"
-      : hasNewVehicleDocuments
-        ? "pending"
-        : currentTruck.documentsReviewStatus ?? "pending",
-    documentsReviewNote: isAdmin
-      ? ""
-      : hasNewVehicleDocuments
-        ? ""
-        : currentTruck.documentsReviewNote ?? "",
-    ...(isAdmin
-      ? {
-          documentsReviewedAt: new Date().toISOString(),
-          documentsReviewedBy: requester.id,
-        }
-      : currentTruck.documentsReviewedAt && currentTruck.documentsReviewedBy
-        ? {
-            documentsReviewedAt: currentTruck.documentsReviewedAt,
-            documentsReviewedBy: currentTruck.documentsReviewedBy,
-          }
-        : {}),
+    documentsApproved: true,
+    documentsReviewStatus: "approved",
+    documentsReviewNote: "",
+    documentsReviewedAt: new Date().toISOString(),
+    documentsReviewedBy: requester.id,
     description: input.description,
     updatedAt: new Date().toISOString(),
   };

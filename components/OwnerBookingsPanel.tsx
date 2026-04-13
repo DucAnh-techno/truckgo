@@ -8,6 +8,7 @@ import {
   getBookingsForOwner,
   updateBookingStatus,
 } from "@/lib/services/bookings";
+import { getTruckById } from "@/lib/services/trucks";
 import { getPublicUserProfilesByIds } from "@/lib/services/users";
 import { formatDateRange } from "@/lib/utils/format";
 import { getBookingStatusLabel, getPaymentStatusLabel } from "@/lib/utils/labels";
@@ -15,6 +16,7 @@ import type { Booking } from "@/types";
 
 interface OwnerBookingViewModel extends Booking {
   renterName: string;
+  truckName: string;
 }
 
 export function OwnerBookingsPanel() {
@@ -28,12 +30,20 @@ export function OwnerBookingsPanel() {
     const renterProfiles = await getPublicUserProfilesByIds(
       nextBookings.map((booking) => booking.renterId)
     );
+    const truckEntries = await Promise.all(
+        nextBookings.map(async (booking) => {
+          const truck = await getTruckById(booking.truckId);
+          return [booking.truckId, truck?.name ?? booking.truckId] as const;
+        })
+    );
+    const truckNameMap = new Map(truckEntries);
 
     setBookings(
       nextBookings.map((booking) => ({
         ...booking,
         renterName:
           renterProfiles.get(booking.renterId)?.name ?? booking.renterId,
+        truckName: truckNameMap.get(booking.truckId) ?? booking.truckId,
       }))
     );
   }
@@ -122,7 +132,7 @@ export function OwnerBookingsPanel() {
                     Đơn thuê cho {booking.renterName}
                   </h3>
                   <p className="mt-1 text-sm text-stone-600">
-                    Xe được thuê: {booking.truckId}
+                    Xe được thuê: {booking.truckName}
                   </p>
                   <p className="mt-1 text-sm text-stone-600">
                     {formatDateRange(booking.startDate, booking.endDate)}

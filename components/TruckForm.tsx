@@ -278,6 +278,7 @@ export function TruckForm({
 
         router.refresh();
       } catch (error) {
+        console.log("Lỗi đăng xe (TruckForm):", error);
         setErrorMessage(
           error instanceof Error ? error.message : "Không thể đăng xe lúc này."
         );

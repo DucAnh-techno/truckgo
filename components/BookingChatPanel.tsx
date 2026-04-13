@@ -24,10 +24,26 @@ export function BookingChatPanel({
   const [draft, setDraft] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
-    return subscribeToBookingMessages(bookingId, setMessages);
-  }, [bookingId]);
+    if (!isOpen) return;
+    
+    let isActive = true;
+  
+    const unsubscribe = subscribeToBookingMessages(
+      bookingId,
+      (messages) => {
+        if (!isActive) return;
+        setMessages(messages);
+      }
+    );
+  
+    return () => {
+      isActive = false;
+      unsubscribe?.();
+    };
+  }, [bookingId, isOpen]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,6 +73,28 @@ export function BookingChatPanel({
     });
   }
 
+  if (!isOpen) {
+    return (
+      <div className="rounded-3xl border border-stone-200 bg-stone-50 p-5 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-orange-500">
+            Chat 
+          </p>
+          <p className="mt-1 text-sm text-stone-600">
+            Trao đổi trực tiếp với {partnerLabel} trong booking này.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          className="rounded-full bg-white px-5 py-2 text-sm font-semibold text-stone-900 border border-stone-200 hover:bg-stone-100 transition"
+        >
+          Mở tin nhắn
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-3xl border border-stone-200 bg-stone-50 p-5">
       <div className="flex items-center justify-between gap-4">
@@ -68,6 +106,13 @@ export function BookingChatPanel({
             Trao đổi trực tiếp với {partnerLabel} trong booking này.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setIsOpen(false)}
+          className="rounded-full bg-stone-200 px-4 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-300 transition"
+        >
+          Đóng
+        </button>
       </div>
 
       <div className="mt-4 max-h-72 space-y-3 overflow-y-auto pr-1">

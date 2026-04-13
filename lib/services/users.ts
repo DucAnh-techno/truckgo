@@ -313,7 +313,7 @@ export async function getPublicUserProfileById(userId: string) {
 
     const privateProfile = await getUserProfileById(userId);
     return privateProfile ? toPublicUserProfile(privateProfile) : null;
-  } catch {
+  } catch (error) {
     return demoPublicProfiles[userId] ?? null;
   }
 }
@@ -364,18 +364,15 @@ export async function submitVerificationDocuments({
   const uploadedDocs: VerificationDocument[] = [];
 
   for (const file of files) {
-    const extension = file.name.split(".").pop();
-    const storageRef = ref(
-      firebase.storage,
-      `verification-docs/${userId}/${uuidv4()}${extension ? `.${extension}` : ""}`
-    );
-    const snapshot = await uploadBytes(storageRef, file);
+    const formData = new FormData(); formData.append("file", file); formData.append("path", "verification-docs/" + userId); const res = await fetch("/api/upload", { method: "POST", body: formData }); if (!res.ok) { throw new Error(`Upload th?t b?i`); } const data = await res.json();
+    
+    
 
     uploadedDocs.push({
       id: uuidv4(),
       name: file.name,
       type: documentType,
-      url: await getDownloadURL(snapshot.ref),
+      url: data.url,
       uploadedAt: new Date().toISOString(),
     });
   }
@@ -475,3 +472,4 @@ export async function getAllUsers() {
     normalizeUserProfile(item.id, item.data() as Partial<User>)
   );
 }
+
