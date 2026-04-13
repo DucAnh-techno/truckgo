@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-
+import { useRouter } from "next/navigation";
 import { BookingChatPanel } from "@/components/BookingChatPanel";
 import { useAuth } from "@/components/providers/AuthProvider";
 import {
@@ -21,6 +21,7 @@ interface OwnerBookingViewModel extends Booking {
 
 export function OwnerBookingsPanel() {
   const { profile } = useAuth();
+    const router = useRouter();
   const [bookings, setBookings] = useState<OwnerBookingViewModel[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -160,16 +161,29 @@ export function OwnerBookingsPanel() {
                       Chờ khách thanh toán
                     </p>
                   ) : null}
-                  {booking.status === "in_progress" ? (
-                    <button
-                      type="button"
-                      disabled={isPending}
-                      onClick={() => handleStatusUpdate(booking.id, "completed")}
-                      className="rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-70"
-                    >
-                      Hoàn tất đơn hàng
-                    </button>
-                  ) : null}
+               {booking.status === "in_progress" ? (
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => handleStatusUpdate(booking.id, "completed")}
+                    className="rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:opacity-70"
+                  >
+                    Hoàn tất đơn hàng
+                  </button>
+
+                <button
+  type="button"
+  className="rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white 
+  transition-colors duration-200 hover:bg-orange-600 active:bg-orange-600"
+  onClick={() => {
+    router.push(`/location?truckId=${booking.truckId}`);
+  }}
+>
+  Vị trí xe hiện tại
+</button>
+                </div>
+              ) : null}
                 </div>
               </div>
 
